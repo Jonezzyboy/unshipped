@@ -1,59 +1,27 @@
+mod auth;
 mod github;
-mod store;
 mod version;
 
+use auth::token;
 use serde::Serialize;
-
-const TOKEN_KEY: &str = "github_token";
-const CLIENT_ID_KEY: &str = "github_client_id";
-
-fn token() -> Result<String, String> {
-    store::get(TOKEN_KEY).ok_or_else(|| "Not signed in".to_string())
-}
 
 #[derive(Serialize)]
 struct AuthStatus {
     user: Option<github::User>,
-    client_id: Option<String>,
+    error: Option<String>,
 }
 
 #[tauri::command]
-async fn auth_status() -> Result<AuthStatus, String> {
-    let client_id = store::get(CLIENT_ID_KEY);
-    let Some(token) = store::get(TOKEN_KEY) else {
-        return Ok(AuthStatus { user: None, client_id });
+async fn auth_status() -> AuthStatus {
+    auth::clear_cache();
+    let token = match token() {
+        Ok(t) => t,
+        Err(e) => return AuthStatus { user: None, error: Some(e) },
     };
     match github::current_user(&token).await {
-        Ok(user) => Ok(AuthStatus { user: Some(user), client_id }),
-        // Token revoked or expired — treat as signed out.
-        Err(_) => {
-            store::delete(TOKEN_KEY)?;
-            Ok(AuthStatus { user: None, client_id })
-        }
+        Ok(user) => AuthStatus { user: Some(user), error: None },
+        Err(e) => AuthStatus { user: None, error: Some(e) },
     }
-}
-
-#[tauri::command]
-async fn start_device_flow(client_id: String) -> Result<github::DeviceCode, String> {
-    let code = github::start_device_flow(&client_id).await?;
-    store::set(CLIENT_ID_KEY, &client_id)?;
-    Ok(code)
-}
-
-#[tauri::command]
-async fn poll_device_flow(
-    client_id: String,
-    device_code: String,
-    interval: u64,
-) -> Result<github::User, String> {
-    let token = github::poll_device_flow(&client_id, &device_code, interval).await?;
-    store::set(TOKEN_KEY, &token)?;
-    github::current_user(&token).await
-}
-
-#[tauri::command]
-fn logout() -> Result<(), String> {
-    store::delete(TOKEN_KEY)
 }
 
 #[tauri::command]
@@ -195,9 +163,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             auth_status,
-            start_device_flow,
-            poll_device_flow,
-            logout,
             list_repos,
             repo_status,
             prepare_release,

@@ -15,27 +15,9 @@
         <div class="login-card">
           <h1 class="wordmark">unshipped<span class="mark-dot">.</span></h1>
           <p class="login-lede">See which of your repos have commits waiting on a release, and cut the next version.</p>
-
-          <div id="login-step-id">
-            <label class="field">
-              <span>GitHub OAuth app client ID</span>
-              <input id="client-id" class="mono" placeholder="Iv1.abc123…" spellcheck="false" autocomplete="off" />
-            </label>
-            <p class="hint">
-              One-time setup: create an OAuth app at github.com → Settings → Developer settings,
-              tick “Enable Device Flow”, and paste its client ID here. No secret needed.
-            </p>
-            <button id="btn-signin" class="primary">Sign in with GitHub</button>
-          </div>
-
-          <div id="login-step-code" hidden>
-            <p class="hint">Enter this code at <span class="mono" id="verify-host">github.com/login/device</span></p>
-            <div id="user-code" class="user-code mono"></div>
-            <button id="btn-open-verify" class="primary">Open GitHub</button>
-            <p class="hint" id="poll-status">Waiting for approval…</p>
-          </div>
-
+          <p class="hint">Uses the GitHub CLI’s login — whatever <span class="mono">gh</span> can see, this app can see.</p>
           <p id="login-error" class="error" hidden></p>
+          <button id="btn-retry" class="primary">Retry</button>
         </div>
       </section>
 
@@ -48,9 +30,13 @@
             <button id="btn-refresh" class="ghost" title="Reload repos">Refresh</button>
             <img id="avatar" class="avatar" alt="" />
             <span id="username" class="mono"></span>
-            <button id="btn-logout" class="ghost">Sign out</button>
           </div>
         </header>
+        <div class="filterbar">
+          <div class="chips" id="owner-chips" role="group" aria-label="Filter by owner"></div>
+          <span class="chip-divider" aria-hidden="true"></span>
+          <div class="chips" id="status-chips" role="group" aria-label="Filter by status"></div>
+        </div>
         <p id="repo-summary" class="summary"></p>
         <ul id="repo-list" class="ledger"></ul>
       </section>

@@ -50,72 +50,6 @@ async fn post_json<T: for<'de> Deserialize<'de>>(
     check(resp).await?.json().await.map_err(|e| e.to_string())
 }
 
-// --- Device flow ---
-
-#[derive(Serialize, Deserialize)]
-pub struct DeviceCode {
-    pub device_code: String,
-    pub user_code: String,
-    pub verification_uri: String,
-    pub expires_in: u64,
-    pub interval: u64,
-}
-
-pub async fn start_device_flow(client_id: &str) -> Result<DeviceCode, String> {
-    let resp = client()
-        .post("https://github.com/login/device/code")
-        .header("Accept", "application/json")
-        .json(&json!({ "client_id": client_id, "scope": "repo" }))
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    check(resp).await?.json().await.map_err(|e| e.to_string())
-}
-
-#[derive(Deserialize)]
-struct TokenResponse {
-    access_token: Option<String>,
-    error: Option<String>,
-    error_description: Option<String>,
-    interval: Option<u64>,
-}
-
-/// Polls until the user approves, the code expires, or GitHub returns a hard error.
-pub async fn poll_device_flow(
-    client_id: &str,
-    device_code: &str,
-    mut interval: u64,
-) -> Result<String, String> {
-    loop {
-        tokio::time::sleep(std::time::Duration::from_secs(interval.max(5))).await;
-        let resp = client()
-            .post("https://github.com/login/oauth/access_token")
-            .header("Accept", "application/json")
-            .json(&json!({
-                "client_id": client_id,
-                "device_code": device_code,
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            }))
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        let body: TokenResponse = check(resp).await?.json().await.map_err(|e| e.to_string())?;
-        if let Some(token) = body.access_token {
-            return Ok(token);
-        }
-        match body.error.as_deref() {
-            Some("authorization_pending") => {}
-            Some("slow_down") => interval = body.interval.unwrap_or(interval + 5),
-            Some(err) => {
-                return Err(body
-                    .error_description
-                    .unwrap_or_else(|| format!("Authorization failed: {err}")))
-            }
-            None => return Err("Unexpected response from GitHub".into()),
-        }
-    }
-}
-
 // --- API models ---
 
 #[derive(Serialize, Deserialize)]
@@ -172,18 +106,28 @@ pub async fn current_user(token: &str) -> Result<User, String> {
 }
 
 pub async fn list_repos(token: &str) -> Result<Vec<Repo>, String> {
-    let mut repos = Vec::new();
-    for page in 1..=10 {
-        let url = format!(
+    let page_url = |page: usize| {
+        format!(
             "{API}/user/repos?per_page=100&page={page}&sort=pushed\
              &affiliation=owner,collaborator,organization_member"
-        );
-        let batch: Vec<Repo> = get_json(token, &url).await?;
-        let done = batch.len() < 100;
-        repos.extend(batch);
-        if done {
+        )
+    };
+    let mut repos: Vec<Repo> = get_json(token, &page_url(1)).await?;
+    if repos.len() < 100 {
+        return Ok(repos);
+    }
+    // Remaining pages fetched concurrently; page count is unknown, so over-ask
+    // and stop collecting at the first empty page.
+    let rest = futures::future::join_all((2..=10).map(|p| {
+        let url = page_url(p);
+        async move { get_json::<Vec<Repo>>(token, &url).await }
+    }));
+    for batch in rest.await {
+        let batch = batch?;
+        if batch.is_empty() {
             break;
         }
+        repos.extend(batch);
     }
     Ok(repos)
 }

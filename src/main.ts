@@ -2,13 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 interface User { login: string; avatar_url: string }
-interface AuthStatus { user: User | null; client_id: string | null }
-interface DeviceCode {
-  device_code: string;
-  user_code: string;
-  verification_uri: string;
-  interval: number;
-}
+interface AuthStatus { user: User | null; error: string | null }
 interface Repo {
   name: string;
   full_name: string;
@@ -17,6 +11,7 @@ interface Repo {
   archived: boolean;
   default_branch: string;
   html_url: string;
+  pushed_at: string | null;
   owner: { login: string };
 }
 interface RepoStatus {
@@ -38,68 +33,115 @@ function showView(id: "view-login" | "view-repos") {
   for (const v of document.querySelectorAll<HTMLElement>(".view")) v.hidden = v.id !== id;
 }
 
-// --- Sign in ---
+// --- Sign in (token comes from the gh CLI) ---
 
-async function initLogin(clientId: string | null) {
+function showLogin(error: string | null) {
   showView("view-login");
-  const input = $<HTMLInputElement>("client-id");
-  if (clientId) input.value = clientId;
+  const errEl = $("login-error");
+  errEl.textContent = error ?? "";
+  errEl.hidden = !error;
+}
 
-  $("btn-signin").onclick = async () => {
-    const id = input.value.trim();
-    const errEl = $("login-error");
-    errEl.hidden = true;
-    if (!id) {
-      errEl.textContent = "Enter your OAuth app client ID first.";
-      errEl.hidden = false;
-      return;
-    }
-    try {
-      const code = await invoke<DeviceCode>("start_device_flow", { clientId: id });
-      $("login-step-id").hidden = true;
-      $("login-step-code").hidden = false;
-      $("user-code").textContent = code.user_code;
-      $("verify-host").textContent = code.verification_uri.replace(/^https?:\/\//, "");
-      $("btn-open-verify").onclick = () => openUrl(code.verification_uri);
-      const user = await invoke<User>("poll_device_flow", {
-        clientId: id,
-        deviceCode: code.device_code,
-        interval: code.interval,
-      });
-      enterApp(user);
-    } catch (e) {
-      $("login-step-id").hidden = false;
-      $("login-step-code").hidden = true;
-      errEl.textContent = String(e);
-      errEl.hidden = false;
-    }
-  };
+async function checkAuth() {
+  const status = await invoke<AuthStatus>("auth_status");
+  if (status.user) enterApp(status.user);
+  else showLogin(status.error);
 }
 
 // --- Repo ledger ---
 
 let allRepos: Repo[] = [];
 const statuses = new Map<string, RepoStatus>();
+let currentLogin = "";
+
+type OwnerFilter = "all" | "mine" | "orgs";
+type StatusFilter = "all" | "unshipped" | "shipped" | "noreleases";
+let ownerFilter: OwnerFilter = "all";
+let statusFilter: StatusFilter = "all";
 
 function enterApp(user: User) {
   showView("view-repos");
+  currentLogin = user.login;
   $<HTMLImageElement>("avatar").src = user.avatar_url;
   $("username").textContent = user.login;
   loadRepos();
 }
 
+let renderTimer: number | undefined;
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = window.setTimeout(() => {
+    renderRepos();
+    summarize();
+    saveStatusCache();
+  }, 150);
+}
+
+// --- Cache: repo list for instant paint; statuses reused while pushed_at is unchanged ---
+
+const REPOS_KEY = "unshipped:repos:v1";
+const STATUS_KEY = "unshipped:statuses:v1";
+
+interface CachedStatus { pushed_at: string | null; status: RepoStatus }
+
+function readCache<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+let statusCache: Record<string, CachedStatus> =
+  readCache<Record<string, CachedStatus>>(STATUS_KEY) ?? {};
+
+function saveStatusCache() {
+  localStorage.setItem(STATUS_KEY, JSON.stringify(statusCache));
+}
+
+function cacheStatus(repo: Repo, status: RepoStatus) {
+  statuses.set(repo.full_name, status);
+  statusCache[repo.full_name] = { pushed_at: repo.pushed_at, status };
+}
+
+function seedFromCache(repos: Repo[]): Repo[] {
+  const stale: Repo[] = [];
+  for (const repo of repos) {
+    const cached = statusCache[repo.full_name];
+    if (cached && cached.pushed_at === repo.pushed_at && cached.status.ahead_by >= 0) {
+      statuses.set(repo.full_name, cached.status);
+    } else {
+      stale.push(repo);
+    }
+  }
+  return stale;
+}
+
 async function loadRepos() {
-  const list = $("repo-list");
-  list.innerHTML = "";
   statuses.clear();
-  $("repo-summary").textContent = "Loading repos…";
+
+  // Paint instantly from the last run's repo list while the fresh one loads.
+  const cachedRepos = readCache<Repo[]>(REPOS_KEY);
+  if (cachedRepos) {
+    allRepos = cachedRepos;
+    seedFromCache(allRepos);
+    renderRepos();
+  }
+  $("repo-summary").textContent = "Refreshing repos…";
+
   try {
     const repos = await invoke<Repo[]>("list_repos");
     allRepos = repos.filter((r) => !r.archived);
-    renderRepos();
-    await fetchStatuses();
+    localStorage.setItem(REPOS_KEY, JSON.stringify(allRepos));
+    statuses.clear();
+    const stale = seedFromCache(allRepos);
     renderRepos();
     summarize();
+    await fetchStatuses(stale);
+    renderRepos();
+    summarize();
+    saveStatusCache();
   } catch (e) {
     $("repo-summary").textContent = String(e);
   }
@@ -114,8 +156,8 @@ function summarize() {
       : `${waiting} of ${total} repos have unshipped commits.`;
 }
 
-async function fetchStatuses() {
-  const queue = [...allRepos];
+async function fetchStatuses(repos: Repo[]) {
+  const queue = [...repos];
   const workers = Array.from({ length: 6 }, async () => {
     for (let repo = queue.shift(); repo; repo = queue.shift()) {
       try {
@@ -124,11 +166,12 @@ async function fetchStatuses() {
           repo: repo.name,
           defaultBranch: repo.default_branch,
         });
-        statuses.set(repo.full_name, status);
+        cacheStatus(repo, status);
       } catch {
+        // Not cached — errors get retried next launch.
         statuses.set(repo.full_name, { latest_tag: null, release_url: null, published_at: null, ahead_by: -1 });
       }
-      updateRow(repo);
+      scheduleRender();
     }
   });
   await Promise.all(workers);
@@ -157,10 +200,31 @@ function relAge(iso: string | null): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
+function matchesOwner(repo: Repo): boolean {
+  if (ownerFilter === "all") return true;
+  const mine = repo.owner.login === currentLogin;
+  return ownerFilter === "mine" ? mine : !mine;
+}
+
+function matchesStatus(repo: Repo, filter: StatusFilter): boolean {
+  if (filter === "all") return true;
+  const status = statuses.get(repo.full_name);
+  if (!status || status.ahead_by < 0) return false;
+  switch (filter) {
+    case "unshipped": return status.ahead_by > 0;
+    case "shipped": return status.ahead_by === 0;
+    case "noreleases": return status.latest_tag === null;
+  }
+}
+
+function searchedRepos(): Repo[] {
+  const q = $<HTMLInputElement>("search").value.toLowerCase();
+  return allRepos.filter((r) => r.full_name.toLowerCase().includes(q));
+}
+
 function sortedRepos(): Repo[] {
-  const filter = $<HTMLInputElement>("search").value.toLowerCase();
-  return allRepos
-    .filter((r) => r.full_name.toLowerCase().includes(filter))
+  return searchedRepos()
+    .filter((r) => matchesOwner(r) && matchesStatus(r, statusFilter))
     .sort((a, b) => {
       const sa = statuses.get(a.full_name)?.ahead_by ?? -2;
       const sb = statuses.get(b.full_name)?.ahead_by ?? -2;
@@ -168,13 +232,82 @@ function sortedRepos(): Repo[] {
     });
 }
 
+function chip(label: string, count: number | null, pressed: boolean, onClick: () => void): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "chip";
+  btn.setAttribute("aria-pressed", String(pressed));
+  btn.textContent = label;
+  if (count !== null) {
+    const c = document.createElement("span");
+    c.className = "count";
+    c.textContent = String(count);
+    btn.append(c);
+  }
+  btn.onclick = onClick;
+  return btn;
+}
+
+function renderFilters() {
+  const searched = searchedRepos();
+
+  const owners = $("owner-chips");
+  owners.innerHTML = "";
+  const ownerDefs: [OwnerFilter, string][] = [["all", "All"], ["mine", "Mine"], ["orgs", "Orgs"]];
+  for (const [value, label] of ownerDefs) {
+    const count = value === "all" ? null : searched.filter((r) =>
+      value === "mine" ? r.owner.login === currentLogin : r.owner.login !== currentLogin
+    ).length;
+    owners.append(chip(label, count, ownerFilter === value, () => {
+      ownerFilter = value;
+      resetAndRender();
+    }));
+  }
+
+  const scope = searched.filter(matchesOwner);
+  const statusEl = $("status-chips");
+  statusEl.innerHTML = "";
+  const statusDefs: [StatusFilter, string][] = [
+    ["all", "All"],
+    ["unshipped", "Unshipped"],
+    ["shipped", "Shipped"],
+    ["noreleases", "No releases"],
+  ];
+  for (const [value, label] of statusDefs) {
+    const count = value === "all" ? null : scope.filter((r) => matchesStatus(r, value)).length;
+    statusEl.append(chip(label, count, statusFilter === value, () => {
+      statusFilter = value;
+      resetAndRender();
+    }));
+  }
+}
+
+const PAGE_SIZE = 20;
+let visibleLimit = PAGE_SIZE;
+
+const sentinelObserver = new IntersectionObserver((entries) => {
+  if (entries.some((e) => e.isIntersecting)) {
+    visibleLimit += PAGE_SIZE;
+    renderRepos();
+  }
+});
+
+// Filter/search changes start back at the first page; status streaming keeps the current one.
+function resetAndRender() {
+  visibleLimit = PAGE_SIZE;
+  renderRepos();
+  summarize();
+}
+
 function renderRepos() {
+  renderFilters();
+  sentinelObserver.disconnect();
   const list = $("repo-list");
   list.innerHTML = "";
-  for (const repo of sortedRepos()) {
+  const repos = sortedRepos();
+  for (const repo of repos.slice(0, visibleLimit)) {
     const li = document.createElement("li");
     li.className = "repo-row";
-    li.dataset.repo = repo.full_name;
     li.append(
       rowName(repo),
       rowLamp(repo),
@@ -184,12 +317,13 @@ function renderRepos() {
     );
     list.append(li);
   }
-}
-
-function updateRow(repo: Repo) {
-  const li = document.querySelector<HTMLElement>(`[data-repo="${CSS.escape(repo.full_name)}"]`);
-  if (!li) return;
-  li.replaceChildren(rowName(repo), rowLamp(repo), rowTag(repo), rowAge(repo), rowActions(repo));
+  if (repos.length > visibleLimit) {
+    const sentinel = document.createElement("li");
+    sentinel.className = "load-more";
+    sentinel.textContent = `Showing ${visibleLimit} of ${repos.length} — scroll for more`;
+    list.append(sentinel);
+    sentinelObserver.observe(sentinel);
+  }
 }
 
 function rowName(repo: Repo): HTMLElement {
@@ -368,9 +502,8 @@ $("btn-create-release").onclick = async () => {
       repo: repo.name,
       defaultBranch: repo.default_branch,
     });
-    statuses.set(repo.full_name, status);
-    updateRow(repo);
-    summarize();
+    cacheStatus(repo, status);
+    scheduleRender();
   } catch (e) {
     btn.disabled = false;
     btn.textContent = "Create release";
@@ -381,20 +514,10 @@ $("btn-create-release").onclick = async () => {
 // --- Wiring ---
 
 $("btn-refresh").onclick = loadRepos;
-$("search").oninput = renderRepos;
-$("btn-logout").onclick = async () => {
-  await invoke("logout");
-  const status = await invoke<AuthStatus>("auth_status");
-  $("login-step-id").hidden = false;
-  $("login-step-code").hidden = true;
-  initLogin(status.client_id);
-};
+$("search").oninput = resetAndRender;
+$("btn-retry").onclick = checkAuth;
 $<HTMLDialogElement>("release-dialog").addEventListener("close", () => {
   currentBump = null;
 });
 
-(async () => {
-  const status = await invoke<AuthStatus>("auth_status");
-  if (status.user) enterApp(status.user);
-  else initLogin(status.client_id);
-})();
+checkAuth();

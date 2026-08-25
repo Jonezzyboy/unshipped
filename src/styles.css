@@ -90,19 +90,7 @@ a:hover { text-decoration: underline; }
   padding: 2rem;
 }
 .login-lede { color: var(--muted); margin: 0.5rem 0 1.5rem; }
-.user-code {
-  font-size: 2rem;
-  letter-spacing: 0.18em;
-  text-align: center;
-  background: var(--bg);
-  border: 1px dashed var(--line);
-  border-radius: 8px;
-  padding: 0.6em;
-  margin: 1rem 0;
-  user-select: all;
-}
-#login-step-code .primary { width: 100%; }
-#btn-signin { width: 100%; margin-top: 0.5rem; }
+#btn-retry { width: 100%; margin-top: 1rem; }
 
 /* --- Topbar + ledger --- */
 .topbar {
@@ -121,6 +109,29 @@ a:hover { text-decoration: underline; }
 .avatar { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); }
 #username { color: var(--muted); font-size: 0.85rem; }
 .summary { color: var(--muted); font-size: 0.82rem; padding: 0.7rem 1.4rem 0; margin: 0; }
+
+.filterbar {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding: 0.8rem 1.4rem 0;
+}
+.chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.chip-divider { width: 1px; height: 1.2rem; background: var(--line); }
+.chip {
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 0.2em 0.85em;
+  background: transparent;
+  color: var(--muted);
+}
+.chip .count { font-family: var(--mono); font-variant-numeric: tabular-nums; opacity: 0.7; margin-left: 0.35em; }
+.chip[aria-pressed="true"] {
+  color: var(--lamp);
+  border-color: color-mix(in srgb, var(--lamp) 50%, transparent);
+  background: color-mix(in srgb, var(--lamp) 9%, transparent);
+}
 
 .ledger {
   list-style: none;
@@ -142,6 +153,12 @@ a:hover { text-decoration: underline; }
 .repo-tag a { color: inherit; }
 .repo-row .actions { text-align: right; }
 .repo-row .actions button { font-size: 0.82rem; padding: 0.3em 0.8em; }
+.load-more {
+  padding: 1rem 0.5rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
 
 /* Signature: the cargo lamp. Heat scales with how much is waiting. */
 .lamp {

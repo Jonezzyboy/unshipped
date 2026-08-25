@@ -4,16 +4,11 @@ Desktop app that shows which of your GitHub repos have commits waiting on a rele
 
 Built with Tauri 2 (Rust backend, TypeScript frontend).
 
-## One-time GitHub setup
+## Auth
 
-The app signs in with the OAuth device flow, which needs a GitHub OAuth app you own:
+The app reuses the [GitHub CLI](https://cli.github.com)'s login — it runs `gh auth token` and inherits exactly the access you have in the terminal, including org private repos. No OAuth app, no PAT, nothing stored by the app itself.
 
-1. GitHub → Settings → Developer settings → OAuth Apps → **New OAuth App**.
-2. Name it anything (e.g. `unshipped`); homepage and callback URL can both be `https://github.com` — the device flow doesn't use the callback.
-3. After creating it, tick **Enable Device Flow** and save.
-4. Copy the **Client ID** — the app asks for it on first launch. No client secret is needed.
-
-The access token and client ID are stored in the OS keychain.
+Requirements: `gh` installed and signed in (`gh auth login`).
 
 ## Run
 
