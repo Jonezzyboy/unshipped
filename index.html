@@ -27,6 +27,11 @@
           <h1 class="wordmark">unshipped<span class="mark-dot">.</span></h1>
           <input id="search" placeholder="Filter repos…" spellcheck="false" />
           <div class="topbar-right">
+            <button id="btn-refresh" class="ghost icon-btn" title="Refresh repos" aria-label="Refresh repos">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5v3h-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
             <div class="profile-menu">
               <button id="btn-profile" class="ghost profile-btn" aria-haspopup="menu" aria-expanded="false">
                 <img id="avatar" class="avatar" alt="" />
@@ -36,7 +41,6 @@
                 </svg>
               </button>
               <div id="profile-dropdown" class="dropdown" role="menu" hidden>
-                <button type="button" id="btn-refresh" role="menuitem">Refresh repos</button>
                 <button type="button" id="btn-settings" role="menuitem">Settings…</button>
               </div>
             </div>

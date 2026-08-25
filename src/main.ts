@@ -634,10 +634,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") setMenu(false);
 });
 
-$("btn-refresh").onclick = () => {
-  setMenu(false);
-  loadRepos();
-};
+$("btn-refresh").onclick = loadRepos;
 $("search").oninput = resetAndRender;
 $("btn-retry").onclick = checkAuth;
 for (const btn of document.querySelectorAll<HTMLButtonElement>("#ledger-head button")) {

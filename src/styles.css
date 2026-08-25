@@ -108,7 +108,16 @@ a:hover { text-decoration: underline; }
   z-index: 2;
 }
 .topbar #search { max-width: 18rem; }
-.topbar-right { margin-left: auto; display: flex; align-items: center; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 0.4rem; }
+.icon-btn {
+  display: grid;
+  place-items: center;
+  border: none;
+  padding: 0.4em;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.icon-btn:hover { color: var(--text); background: var(--surface); }
 .avatar { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); }
 #username { color: var(--muted); font-size: 0.85rem; }
 
