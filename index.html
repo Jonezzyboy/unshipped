@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>unshipped</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <div id="app">
+      <!-- Sign-in -->
+      <section id="view-login" class="view" hidden>
+        <div class="login-card">
+          <h1 class="wordmark">unshipped<span class="mark-dot">.</span></h1>
+          <p class="login-lede">See which of your repos have commits waiting on a release, and cut the next version.</p>
+
+          <div id="login-step-id">
+            <label class="field">
+              <span>GitHub OAuth app client ID</span>
+              <input id="client-id" class="mono" placeholder="Iv1.abc123…" spellcheck="false" autocomplete="off" />
+            </label>
+            <p class="hint">
+              One-time setup: create an OAuth app at github.com → Settings → Developer settings,
+              tick “Enable Device Flow”, and paste its client ID here. No secret needed.
+            </p>
+            <button id="btn-signin" class="primary">Sign in with GitHub</button>
+          </div>
+
+          <div id="login-step-code" hidden>
+            <p class="hint">Enter this code at <span class="mono" id="verify-host">github.com/login/device</span></p>
+            <div id="user-code" class="user-code mono"></div>
+            <button id="btn-open-verify" class="primary">Open GitHub</button>
+            <p class="hint" id="poll-status">Waiting for approval…</p>
+          </div>
+
+          <p id="login-error" class="error" hidden></p>
+        </div>
+      </section>
+
+      <!-- Repo ledger -->
+      <section id="view-repos" class="view" hidden>
+        <header class="topbar">
+          <h1 class="wordmark">unshipped<span class="mark-dot">.</span></h1>
+          <input id="search" placeholder="Filter repos…" spellcheck="false" />
+          <div class="topbar-right">
+            <button id="btn-refresh" class="ghost" title="Reload repos">Refresh</button>
+            <img id="avatar" class="avatar" alt="" />
+            <span id="username" class="mono"></span>
+            <button id="btn-logout" class="ghost">Sign out</button>
+          </div>
+        </header>
+        <p id="repo-summary" class="summary"></p>
+        <ul id="repo-list" class="ledger"></ul>
+      </section>
+    </div>
+
+    <!-- Release dialog -->
+    <dialog id="release-dialog">
+      <form method="dialog" class="release">
+        <header class="release-head">
+          <h2 id="rel-title" class="mono"></h2>
+          <button value="close" class="ghost" type="submit">Close</button>
+        </header>
+        <div id="rel-loading" class="hint">Reading commits since the last release…</div>
+        <div id="rel-body" hidden>
+          <p id="rel-reason" class="hint"></p>
+          <div id="bump-choices" class="bumps" role="radiogroup" aria-label="Version bump"></div>
+          <details id="rel-commits-wrap">
+            <summary id="rel-commits-summary"></summary>
+            <ul id="rel-commits" class="commits mono"></ul>
+          </details>
+          <label class="field">
+            <span>Release title</span>
+            <input id="rel-name" spellcheck="false" />
+          </label>
+          <label class="field">
+            <span>Release notes <em id="notes-status"></em></span>
+            <textarea id="rel-notes" rows="12" spellcheck="false"></textarea>
+          </label>
+          <p id="rel-error" class="error" hidden></p>
+          <footer class="release-foot">
+            <button id="btn-create-release" class="primary" type="button">Create release</button>
+            <a id="rel-done-link" target="_blank" hidden>View release on GitHub →</a>
+          </footer>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

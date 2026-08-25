@@ -1,0 +1,228 @@
+:root {
+  --bg: #10141a;
+  --surface: #171d26;
+  --surface-2: #1d2530;
+  --line: #232b37;
+  --text: #dbe2ec;
+  --muted: #7d8a9c;
+  --lamp: #f0a63c;
+  --lamp-hot: #ff7a45;
+  --ok: #4cc38a;
+  --err: #e5645f;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  color-scheme: dark;
+  font-family: -apple-system, "Avenir Next", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+.mono { font-family: var(--mono); }
+[hidden] { display: none !important; }
+
+.wordmark {
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+.mark-dot { color: var(--lamp); }
+
+/* --- Controls --- */
+button {
+  font: inherit;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 0.4em 0.9em;
+  cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button.primary {
+  background: var(--lamp);
+  border-color: var(--lamp);
+  color: #171104;
+  font-weight: 600;
+}
+button.primary:hover { filter: brightness(1.08); }
+button.primary:disabled { opacity: 0.5; cursor: default; filter: none; }
+button.ghost { background: transparent; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--lamp);
+  outline-offset: 1px;
+}
+
+input, textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.45em 0.7em;
+  width: 100%;
+}
+textarea { font-family: var(--mono); font-size: 0.85rem; resize: vertical; }
+
+.field { display: block; margin: 0.9rem 0; }
+.field > span { display: block; color: var(--muted); font-size: 0.8rem; margin-bottom: 0.3rem; }
+.hint { color: var(--muted); font-size: 0.82rem; }
+.error { color: var(--err); font-size: 0.85rem; }
+a { color: var(--lamp); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* --- Login --- */
+#view-login {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 2rem;
+}
+.login-card {
+  width: min(26rem, 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2rem;
+}
+.login-lede { color: var(--muted); margin: 0.5rem 0 1.5rem; }
+.user-code {
+  font-size: 2rem;
+  letter-spacing: 0.18em;
+  text-align: center;
+  background: var(--bg);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 0.6em;
+  margin: 1rem 0;
+  user-select: all;
+}
+#login-step-code .primary { width: 100%; }
+#btn-signin { width: 100%; margin-top: 0.5rem; }
+
+/* --- Topbar + ledger --- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1.4rem;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+.topbar #search { max-width: 18rem; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; }
+.avatar { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); }
+#username { color: var(--muted); font-size: 0.85rem; }
+.summary { color: var(--muted); font-size: 0.82rem; padding: 0.7rem 1.4rem 0; margin: 0; }
+
+.ledger {
+  list-style: none;
+  margin: 0.5rem 0 3rem;
+  padding: 0 1.4rem;
+}
+.repo-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.65rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.repo-row:hover { background: var(--surface); }
+.repo-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repo-name .owner { color: var(--muted); font-weight: 400; }
+.repo-tag, .repo-age { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); }
+.repo-tag a { color: inherit; }
+.repo-row .actions { text-align: right; }
+.repo-row .actions button { font-size: 0.82rem; padding: 0.3em 0.8em; }
+
+/* Signature: the cargo lamp. Heat scales with how much is waiting. */
+.lamp {
+  justify-self: start;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  border-radius: 999px;
+  padding: 0.1em 0.75em;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.lamp[data-heat="loading"] { color: var(--muted); border-style: dashed; }
+.lamp[data-heat="shipped"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.lamp[data-heat="warm"] {
+  color: var(--lamp);
+  border-color: color-mix(in srgb, var(--lamp) 45%, transparent);
+  background: color-mix(in srgb, var(--lamp) 10%, transparent);
+}
+.lamp[data-heat="hot"] {
+  color: var(--lamp-hot);
+  border-color: color-mix(in srgb, var(--lamp-hot) 55%, transparent);
+  background: color-mix(in srgb, var(--lamp-hot) 14%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--lamp-hot) 25%, transparent);
+}
+.lamp[data-heat="error"] { color: var(--err); }
+
+/* --- Release dialog --- */
+dialog {
+  width: min(44rem, calc(100vw - 3rem));
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.4rem 1.6rem;
+}
+dialog::backdrop { background: rgb(6 8 11 / 0.65); }
+.release-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; }
+.release-head h2 { margin: 0; font-size: 1rem; font-weight: 600; }
+
+.bumps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin: 0.8rem 0 1rem; }
+.bump {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+  display: block;
+}
+.bump .kind { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.bump .ver { font-family: var(--mono); font-size: 1.05rem; }
+.bump[aria-checked="true"] {
+  border-color: var(--lamp);
+  background: color-mix(in srgb, var(--lamp) 8%, var(--bg));
+}
+.bump .suggested { color: var(--lamp); font-size: 0.72rem; }
+
+#rel-commits-wrap { margin: 0.6rem 0; }
+#rel-commits-wrap summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+.commits {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  max-height: 11rem;
+  overflow: auto;
+}
+.commits li { padding: 0.15rem 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#notes-status { font-style: normal; color: var(--lamp); }
+.release-foot { display: flex; align-items: center; gap: 1rem; margin-top: 0.4rem; }
+
+@media (max-width: 640px) {
+  .repo-row { grid-template-columns: 1fr auto; }
+  .repo-tag, .repo-age { display: none; }
+  .topbar { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lamp[data-heat="loading"] { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.45; } }
+}
