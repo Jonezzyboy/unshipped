@@ -1,6 +1,7 @@
 mod argo;
 mod auth;
 mod github;
+mod iap;
 mod settings;
 mod store;
 mod version;
@@ -20,12 +21,16 @@ fn save_settings(app: tauri::AppHandle, new: settings::Settings) -> Result<(), S
     settings::save(&app, &new)
 }
 
-fn argo_config(app: &tauri::AppHandle) -> Result<settings::Settings, String> {
+fn argo_conn(app: &tauri::AppHandle) -> Result<argo::Conn, String> {
     let s = settings::load(app);
     if s.argo_url.trim().is_empty() {
         return Err("Set the Argo CD server URL first.".into());
     }
-    Ok(s)
+    let iap_token = match s.argo_iap_client_id.trim() {
+        "" => None,
+        client_id => Some(iap::identity_token(client_id, s.argo_iap_service_account.trim())?),
+    };
+    Ok(argo::Conn { url: s.argo_url.trim().into(), insecure: s.argo_insecure, iap_token })
 }
 
 #[tauri::command]
@@ -34,17 +39,17 @@ async fn argo_login(
     username: String,
     password: String,
 ) -> Result<argo::ArgoStatus, String> {
-    let s = argo_config(&app)?;
-    let token = argo::login(&s.argo_url, s.argo_insecure, &username, &password).await?;
-    let status = argo::status(&s.argo_url, s.argo_insecure, &token).await?;
+    let conn = argo_conn(&app)?;
+    let token = argo::login(&conn, &username, &password).await?;
+    let status = argo::status(&conn, Some(&token)).await?;
     store::set(ARGO_TOKEN_KEY, &token)?;
     Ok(status)
 }
 
 #[tauri::command]
 async fn argo_set_token(app: tauri::AppHandle, token: String) -> Result<argo::ArgoStatus, String> {
-    let s = argo_config(&app)?;
-    let status = argo::status(&s.argo_url, s.argo_insecure, token.trim()).await?;
+    let conn = argo_conn(&app)?;
+    let status = argo::status(&conn, Some(token.trim())).await?;
     store::set(ARGO_TOKEN_KEY, token.trim())?;
     Ok(status)
 }
@@ -52,13 +57,16 @@ async fn argo_set_token(app: tauri::AppHandle, token: String) -> Result<argo::Ar
 #[tauri::command]
 async fn argo_status(app: tauri::AppHandle) -> Result<Option<argo::ArgoStatus>, String> {
     let s = settings::load(&app);
-    let Some(token) = store::get(ARGO_TOKEN_KEY) else {
-        return Ok(None);
-    };
     if s.argo_url.trim().is_empty() {
         return Ok(None);
     }
-    argo::status(&s.argo_url, s.argo_insecure, &token).await.map(Some)
+    let token = store::get(ARGO_TOKEN_KEY);
+    // With IAP in front, Argo may trust the proxy identity and need no token of its own.
+    if token.is_none() && s.argo_iap_client_id.trim().is_empty() {
+        return Ok(None);
+    }
+    let conn = argo_conn(&app)?;
+    argo::status(&conn, token.as_deref()).await.map(Some)
 }
 
 #[tauri::command]

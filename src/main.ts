@@ -590,7 +590,13 @@ function renderThemeOptions() {
 
 // --- Settings ---
 
-interface Settings { argo_url: string; argo_insecure: boolean; theme: string }
+interface Settings {
+  argo_url: string;
+  argo_insecure: boolean;
+  argo_iap_client_id: string;
+  argo_iap_service_account: string;
+  theme: string;
+}
 interface ArgoStatus { username: string | null; applications: number | null }
 
 function showSettingsSection(section: string) {
@@ -607,6 +613,8 @@ function currentSettings(): Settings {
   return {
     argo_url: $<HTMLInputElement>("argo-url").value.trim(),
     argo_insecure: $<HTMLInputElement>("argo-insecure").checked,
+    argo_iap_client_id: $<HTMLInputElement>("argo-iap-client").value.trim(),
+    argo_iap_service_account: $<HTMLInputElement>("argo-iap-sa").value.trim(),
     theme: currentTheme,
   };
 }
@@ -634,6 +642,9 @@ async function openSettings() {
   const s = await invoke<Settings>("get_settings");
   $<HTMLInputElement>("argo-url").value = s.argo_url;
   $<HTMLInputElement>("argo-insecure").checked = s.argo_insecure;
+  $<HTMLInputElement>("argo-iap-client").value = s.argo_iap_client_id;
+  $<HTMLInputElement>("argo-iap-sa").value = s.argo_iap_service_account;
+  $<HTMLDetailsElement>("iap-details").open = !!s.argo_iap_client_id;
   renderThemeOptions();
   try {
     showArgoConnected(await invoke<ArgoStatus | null>("argo_status"));
@@ -670,6 +681,23 @@ $("btn-argo-token").onclick = () =>
 $("btn-argo-disconnect").onclick = async () => {
   await invoke("argo_disconnect");
   showArgoConnected(null);
+};
+$("btn-argo-test").onclick = async () => {
+  $("argo-error").hidden = true;
+  const btn = $<HTMLButtonElement>("btn-argo-test");
+  btn.disabled = true;
+  btn.textContent = "Testing…";
+  try {
+    await invoke("save_settings", { new: currentSettings() });
+    const status = await invoke<ArgoStatus | null>("argo_status");
+    if (status) showArgoConnected(status);
+    else showArgoError("Reachable, but not connected yet — sign in below or configure IAP.");
+  } catch (e) {
+    showArgoError(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Test connection";
+  }
 };
 
 function closeSettings() {

@@ -8,6 +8,10 @@ pub struct Settings {
     pub argo_url: String,
     #[serde(default)]
     pub argo_insecure: bool,
+    #[serde(default)]
+    pub argo_iap_client_id: String,
+    #[serde(default)]
+    pub argo_iap_service_account: String,
     #[serde(default = "default_theme")]
     pub theme: String,
 }
@@ -18,7 +22,13 @@ fn default_theme() -> String {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { argo_url: String::new(), argo_insecure: false, theme: default_theme() }
+        Self {
+            argo_url: String::new(),
+            argo_insecure: false,
+            argo_iap_client_id: String::new(),
+            argo_iap_service_account: String::new(),
+            theme: default_theme(),
+        }
     }
 }
 

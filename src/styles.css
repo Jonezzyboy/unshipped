@@ -437,6 +437,10 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 .check input { width: auto; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
 .or-rule { margin: 1rem 0 0.4rem; }
+.iap-block { margin: 0.4rem 0 1rem; }
+.iap-block summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+.iap-block[open] summary { color: var(--text); }
+#btn-argo-test { margin-bottom: 0.8rem; }
 .token-row { display: flex; gap: 0.6rem; }
 #argo-connected { margin: 0.8rem 0; }
 #argo-status-text { color: var(--ok); }

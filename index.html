@@ -93,6 +93,24 @@
                 Allow self-signed TLS certificates
               </label>
 
+              <details id="iap-details" class="iap-block">
+                <summary>Behind Google IAP?</summary>
+                <label class="field">
+                  <span>IAP OAuth client ID</span>
+                  <input id="argo-iap-client" class="mono" placeholder="1234…apps.googleusercontent.com" spellcheck="false" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span>Service account to impersonate (optional)</span>
+                  <input id="argo-iap-sa" class="mono" placeholder="name@project.iam.gserviceaccount.com" spellcheck="false" autocomplete="off" />
+                </label>
+                <p class="hint">
+                  Identity tokens are minted with your local gcloud login and refreshed hourly.
+                  Leave the service account empty only if gcloud is signed in as one.
+                </p>
+              </details>
+
+              <button type="button" id="btn-argo-test" class="ghost">Test connection</button>
+
               <div id="argo-connected" hidden>
                 <p id="argo-status-text" class="hint"></p>
                 <button type="button" id="btn-argo-disconnect" class="ghost">Disconnect</button>
