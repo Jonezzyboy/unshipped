@@ -13,7 +13,7 @@
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   /* Shared by header and rows — the actions column is fixed so every row's
      fr tracks resolve identically whether or not the row has a button. */
-  --ledger-cols: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem 8rem;
+  --ledger-cols: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem minmax(8rem, 1fr) 8rem;
 
   color-scheme: dark;
   font-family: -apple-system, "Avenir Next", system-ui, sans-serif;
@@ -462,10 +462,24 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 #notes-status { font-style: normal; color: var(--lamp); }
 .release-foot { display: flex; align-items: center; gap: 1rem; margin-top: 0.4rem; }
 
+.deploy {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deploy .dot { font-size: 0.9em; margin-right: 0.35em; }
+.deploy[data-state="ok"] .dot { color: var(--ok); }
+.deploy[data-state="warn"] .dot { color: var(--lamp); }
+.deploy[data-state="bad"] .dot { color: var(--err); }
+
 @media (max-width: 640px) {
   .repo-row, .ledger-head { grid-template-columns: 1fr auto auto; }
-  .repo-tag, .repo-age,
-  .ledger-head [data-sort="tag"], .ledger-head [data-sort="released"] { display: none; }
+  .repo-tag, .repo-age, .deploy,
+  .ledger-head [data-sort="tag"], .ledger-head [data-sort="released"],
+  .ledger-head [data-sort="deployed"] { display: none; }
   .topbar { flex-wrap: wrap; }
 }
 

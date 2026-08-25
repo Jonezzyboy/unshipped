@@ -82,6 +82,10 @@ function scheduleRender() {
 const REPOS_KEY = "unshipped:repos:v1";
 const STATUS_KEY = "unshipped:statuses:v1";
 
+// Demo mode gets its own cache namespace so canned data never mixes with real data.
+let demoMode = false;
+const cacheKey = (k: string) => (demoMode ? `demo:${k}` : k);
+
 interface CachedStatus { pushed_at: string | null; status: RepoStatus }
 
 function readCache<T>(key: string): T | null {
@@ -93,11 +97,10 @@ function readCache<T>(key: string): T | null {
   }
 }
 
-let statusCache: Record<string, CachedStatus> =
-  readCache<Record<string, CachedStatus>>(STATUS_KEY) ?? {};
+let statusCache: Record<string, CachedStatus> = {};
 
 function saveStatusCache() {
-  localStorage.setItem(STATUS_KEY, JSON.stringify(statusCache));
+  localStorage.setItem(cacheKey(STATUS_KEY), JSON.stringify(statusCache));
 }
 
 function cacheStatus(repo: Repo, status: RepoStatus) {
@@ -122,18 +125,19 @@ async function loadRepos() {
   statuses.clear();
 
   // Paint instantly from the last run's repo list while the fresh one loads.
-  const cachedRepos = readCache<Repo[]>(REPOS_KEY);
+  const cachedRepos = readCache<Repo[]>(cacheKey(REPOS_KEY));
   if (cachedRepos) {
     allRepos = cachedRepos;
     seedFromCache(allRepos);
     renderRepos();
   }
   $("repo-summary").textContent = "Refreshing repos…";
+  loadArgoApps();
 
   try {
     const repos = await invoke<Repo[]>("list_repos");
     allRepos = repos.filter((r) => !r.archived);
-    localStorage.setItem(REPOS_KEY, JSON.stringify(allRepos));
+    localStorage.setItem(cacheKey(REPOS_KEY), JSON.stringify(allRepos));
     statuses.clear();
     const stale = seedFromCache(allRepos);
     renderRepos();
@@ -175,6 +179,51 @@ async function fetchStatuses(repos: Repo[]) {
     }
   });
   await Promise.all(workers);
+}
+
+// --- Argo deployments ---
+
+interface ArgoApp { name: string; repo_urls: string[]; sync: string; health: string; revision: string | null }
+let argoAppsByRepo = new Map<string, ArgoApp[]>();
+
+function normalizeRepoUrl(url: string): string | null {
+  const m = url.toLowerCase().match(/github\.com[:/]+([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+async function loadArgoApps() {
+  try {
+    const apps = await invoke<ArgoApp[]>("argo_apps");
+    argoAppsByRepo = new Map();
+    for (const app of apps) {
+      for (const url of app.repo_urls) {
+        const repoKey = normalizeRepoUrl(url);
+        if (!repoKey) continue;
+        const list = argoAppsByRepo.get(repoKey) ?? [];
+        if (!list.includes(app)) list.push(app);
+        argoAppsByRepo.set(repoKey, list);
+      }
+    }
+    scheduleRender();
+  } catch {
+    // Argo is optional; the column just stays empty.
+  }
+}
+
+function appsFor(repo: Repo): ArgoApp[] {
+  return argoAppsByRepo.get(repo.full_name.toLowerCase()) ?? [];
+}
+
+const HEALTH_RANK: Record<string, number> = {
+  Degraded: 5, Missing: 4, Unknown: 3, Progressing: 2, Suspended: 2, Healthy: 1,
+};
+
+function deployRank(repo: Repo): number {
+  const apps = appsFor(repo);
+  if (!apps.length) return 0;
+  let rank = Math.max(...apps.map((a) => HEALTH_RANK[a.health] ?? 3));
+  if (apps.some((a) => a.sync === "OutOfSync")) rank += 0.5;
+  return rank;
 }
 
 function heat(status: RepoStatus | undefined): string {
@@ -222,10 +271,10 @@ function searchedRepos(): Repo[] {
   return allRepos.filter((r) => r.full_name.toLowerCase().includes(q));
 }
 
-type SortKey = "name" | "waiting" | "tag" | "released";
+type SortKey = "name" | "waiting" | "tag" | "released" | "deployed";
 let sortKey: SortKey = "waiting";
 let sortDir: 1 | -1 = -1;
-const defaultDirs: Record<SortKey, 1 | -1> = { name: 1, waiting: -1, tag: 1, released: -1 };
+const defaultDirs: Record<SortKey, 1 | -1> = { name: 1, waiting: -1, tag: 1, released: -1, deployed: -1 };
 
 function compareRepos(a: Repo, b: Repo): number {
   const sa = statuses.get(a.full_name);
@@ -243,6 +292,9 @@ function compareRepos(a: Repo, b: Repo): number {
       break;
     case "released":
       cmp = (sa?.published_at ?? "").localeCompare(sb?.published_at ?? "");
+      break;
+    case "deployed":
+      cmp = deployRank(a) - deployRank(b);
       break;
   }
   return cmp * sortDir || a.full_name.localeCompare(b.full_name);
@@ -342,6 +394,7 @@ function renderRepos() {
       rowLamp(repo),
       rowTag(repo),
       rowAge(repo),
+      rowDeploy(repo),
       rowActions(repo),
     );
     list.append(li);
@@ -395,6 +448,37 @@ function rowAge(repo: Repo): HTMLElement {
   const el = document.createElement("span");
   el.className = "repo-age";
   el.textContent = relAge(statuses.get(repo.full_name)?.published_at ?? null);
+  return el;
+}
+
+function rowDeploy(repo: Repo): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "deploy";
+  const apps = appsFor(repo);
+  if (!apps.length) {
+    el.textContent = "—";
+    return el;
+  }
+
+  const rank = deployRank(repo);
+  el.dataset.state = rank >= 4 ? "bad" : rank > 1 ? "warn" : "ok";
+
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  dot.textContent = "●";
+
+  const worst = apps.reduce((a, b) => ((HEALTH_RANK[b.health] ?? 3) > (HEALTH_RANK[a.health] ?? 3) ? b : a));
+  const outOfSync = apps.filter((a) => a.sync === "OutOfSync").length;
+  let label: string;
+  if (apps.length === 1) {
+    label = worst.health + (outOfSync ? " · OutOfSync" : "");
+  } else {
+    label = `${apps.length} apps · ${worst.health}${outOfSync ? ` · ${outOfSync} OutOfSync` : ""}`;
+  }
+  el.append(dot, document.createTextNode(label));
+  el.title = apps
+    .map((a) => `${a.name}: ${a.sync} / ${a.health}${a.revision ? ` @ ${a.revision}` : ""}`)
+    .join("\n");
   return el;
 }
 
@@ -759,4 +843,8 @@ applyTheme(currentTheme);
 invoke<Settings>("get_settings").then((s) => {
   if (s.theme !== currentTheme) applyTheme(s.theme);
 });
-checkAuth();
+(async () => {
+  demoMode = await invoke<boolean>("is_demo").catch(() => false);
+  statusCache = readCache<Record<string, CachedStatus>>(cacheKey(STATUS_KEY)) ?? {};
+  checkAuth();
+})();

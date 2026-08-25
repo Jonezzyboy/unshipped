@@ -103,3 +103,44 @@ pub async fn status(conn: &Conn, token: Option<&str>) -> Result<ArgoStatus, Stri
 
     Ok(ArgoStatus { username: info.username, applications })
 }
+
+#[derive(Serialize)]
+pub struct App {
+    pub name: String,
+    pub repo_urls: Vec<String>,
+    pub sync: String,
+    pub health: String,
+    pub revision: Option<String>,
+}
+
+pub async fn apps(conn: &Conn, token: Option<&str>) -> Result<Vec<App>, String> {
+    let fields = "items.metadata.name,items.spec.source.repoURL,items.spec.sources,\
+                  items.status.sync.status,items.status.sync.revision,items.status.health.status";
+    let req = client(conn.insecure)?.get(format!(
+        "{}/api/v1/applications?fields={fields}",
+        base(&conn.url)
+    ));
+    let resp = conn.apply(req, token).send().await.map_err(|e| e.to_string())?;
+    let body: serde_json::Value = check(resp).await?.json().await.map_err(|e| e.to_string())?;
+
+    let mut apps = Vec::new();
+    for item in body["items"].as_array().unwrap_or(&Vec::new()) {
+        let mut repo_urls: Vec<String> = Vec::new();
+        if let Some(url) = item["spec"]["source"]["repoURL"].as_str() {
+            repo_urls.push(url.to_string());
+        }
+        for source in item["spec"]["sources"].as_array().unwrap_or(&Vec::new()) {
+            if let Some(url) = source["repoURL"].as_str() {
+                repo_urls.push(url.to_string());
+            }
+        }
+        apps.push(App {
+            name: item["metadata"]["name"].as_str().unwrap_or_default().to_string(),
+            repo_urls,
+            sync: item["status"]["sync"]["status"].as_str().unwrap_or("Unknown").to_string(),
+            health: item["status"]["health"]["status"].as_str().unwrap_or("Unknown").to_string(),
+            revision: item["status"]["sync"]["revision"].as_str().map(|r| r.chars().take(7).collect()),
+        });
+    }
+    Ok(apps)
+}

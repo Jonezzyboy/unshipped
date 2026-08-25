@@ -1,5 +1,6 @@
 mod argo;
 mod auth;
+mod demo;
 mod github;
 mod iap;
 mod settings;
@@ -56,6 +57,12 @@ async fn argo_set_token(app: tauri::AppHandle, token: String) -> Result<argo::Ar
 
 #[tauri::command]
 async fn argo_status(app: tauri::AppHandle) -> Result<Option<argo::ArgoStatus>, String> {
+    if demo::enabled() {
+        return Ok(Some(argo::ArgoStatus {
+            username: Some("demo".into()),
+            applications: Some(demo::argo_apps().len() as u64),
+        }));
+    }
     let s = settings::load(&app);
     if s.argo_url.trim().is_empty() {
         return Ok(None);
@@ -74,6 +81,20 @@ fn argo_disconnect() -> Result<(), String> {
     store::delete(ARGO_TOKEN_KEY)
 }
 
+#[tauri::command]
+async fn argo_apps(app: tauri::AppHandle) -> Result<Vec<argo::App>, String> {
+    if demo::enabled() {
+        return Ok(demo::argo_apps());
+    }
+    let s = settings::load(&app);
+    let token = store::get(ARGO_TOKEN_KEY);
+    if s.argo_url.trim().is_empty() || (token.is_none() && s.argo_iap_client_id.trim().is_empty()) {
+        return Ok(Vec::new());
+    }
+    let conn = argo_conn(&app)?;
+    argo::apps(&conn, token.as_deref()).await
+}
+
 #[derive(Serialize)]
 struct AuthStatus {
     user: Option<github::User>,
@@ -81,7 +102,15 @@ struct AuthStatus {
 }
 
 #[tauri::command]
+fn is_demo() -> bool {
+    demo::enabled()
+}
+
+#[tauri::command]
 async fn auth_status() -> AuthStatus {
+    if demo::enabled() {
+        return AuthStatus { user: Some(demo::user()), error: None };
+    }
     auth::clear_cache();
     let token = match token() {
         Ok(t) => t,
@@ -95,6 +124,9 @@ async fn auth_status() -> AuthStatus {
 
 #[tauri::command]
 async fn list_repos() -> Result<Vec<github::Repo>, String> {
+    if demo::enabled() {
+        return Ok(demo::repos());
+    }
     github::list_repos(&token()?).await
 }
 
@@ -112,6 +144,15 @@ async fn repo_status(
     repo: String,
     default_branch: String,
 ) -> Result<RepoStatus, String> {
+    if demo::enabled() {
+        let (tag, published, ahead) = demo::status(&format!("{owner}/{repo}"));
+        return Ok(RepoStatus {
+            latest_tag: tag.map(String::from),
+            release_url: tag.map(|t| format!("https://github.com/{owner}/{repo}/releases/tag/{t}")),
+            published_at: published.map(String::from),
+            ahead_by: ahead,
+        });
+    }
     let token = token()?;
     match github::latest_release(&token, &owner, &repo).await? {
         Some(release) => {
@@ -147,6 +188,18 @@ async fn prepare_release(
     repo: String,
     default_branch: String,
 ) -> Result<ReleasePrep, String> {
+    if demo::enabled() {
+        let full = format!("{owner}/{repo}");
+        let (tag, _, ahead) = demo::status(&full);
+        let commits = demo::commits(&full);
+        let suggestion = version::suggest(tag, &commits);
+        return Ok(ReleasePrep {
+            current_tag: tag.map(String::from),
+            suggestion,
+            commit_count: ahead,
+            commits,
+        });
+    }
     let token = token()?;
     let release = github::latest_release(&token, &owner, &repo).await?;
     let current_tag = release.map(|r| r.tag_name);
@@ -192,6 +245,10 @@ async fn generate_notes(
     default_branch: String,
     previous_tag: Option<String>,
 ) -> Result<Notes, String> {
+    if demo::enabled() {
+        let (name, body) = demo::notes(&format!("{owner}/{repo}"), &tag_name);
+        return Ok(Notes { name, body });
+    }
     let notes = github::generate_notes(
         &token()?,
         &owner,
@@ -213,6 +270,10 @@ async fn create_release(
     name: String,
     body: String,
 ) -> Result<String, String> {
+    if demo::enabled() {
+        let _ = (&name, &body);
+        return Ok(format!("https://github.com/{owner}/{repo}/releases/tag/{tag_name}"));
+    }
     let created = github::create_release(
         &token()?,
         &owner,
@@ -231,7 +292,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            is_demo,
             auth_status,
+            argo_apps,
             get_settings,
             save_settings,
             argo_login,

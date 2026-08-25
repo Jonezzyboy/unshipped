@@ -19,6 +19,10 @@ npm run tauri dev
 
 Build a distributable app with `npm run tauri build`.
 
+### Demo mode
+
+`npm run tauri:demo` (or any launch with `UNSHIPPED_DEMO=1`) runs the full UI against canned data — no gh, GitHub, or Argo needed. Repos, statuses, release prep/notes, and Argo deployments are all faked, and the demo uses a separate cache namespace so it never pollutes real data.
+
 ## How it works
 
 - **Repo list** — everything you own, collaborate on, or can access via org membership (archived repos are hidden). Sorted by most unshipped commits first.
@@ -31,6 +35,8 @@ Build a distributable app with `npm run tauri build`.
 
 ⚙ Settings (topbar) holds the Argo CD connection for deployment monitoring: server URL, optional self-signed-TLS allowance, and auth via username/password (exchanged for a session token) or a pasted API token. The token lives in the OS keychain; the rest in `settings.json` under the app config dir.
 
+- **Deployed column** — Argo CD applications are matched to repos by their git source URL; the column shows worst health + sync state across a repo's apps (hover for the per-app breakdown).
+
 ## Later
 
-- Deployment monitoring UI on top of the Argo CD connection (app sync/health per repo after a release is cut).
+- Richer deployment monitoring (per-environment drill-down, deployed-version vs latest-release comparison, sync triggering).
