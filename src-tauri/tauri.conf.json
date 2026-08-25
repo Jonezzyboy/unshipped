@@ -14,10 +14,11 @@
     "windows": [
       {
         "title": "unshipped",
-        "width": 1040,
-        "height": 720,
+        "width": 1520,
+        "height": 1000,
         "minWidth": 560,
-        "minHeight": 400
+        "minHeight": 400,
+        "center": true
       }
     ],
     "security": {
