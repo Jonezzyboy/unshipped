@@ -211,8 +211,8 @@ function matchesStatus(repo: Repo, filter: StatusFilter): boolean {
   const status = statuses.get(repo.full_name);
   if (!status || status.ahead_by < 0) return false;
   switch (filter) {
-    case "unshipped": return status.ahead_by > 0;
-    case "shipped": return status.ahead_by === 0;
+    case "unshipped": return status.latest_tag !== null && status.ahead_by > 0;
+    case "shipped": return status.latest_tag !== null && status.ahead_by === 0;
     case "noreleases": return status.latest_tag === null;
   }
 }
