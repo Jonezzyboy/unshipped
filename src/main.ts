@@ -29,7 +29,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 // --- Views ---
 
-function showView(id: "view-login" | "view-repos") {
+function showView(id: "view-login" | "view-repos" | "view-settings") {
   for (const v of document.querySelectorAll<HTMLElement>(".view")) v.hidden = v.id !== id;
 }
 
@@ -540,17 +540,70 @@ $("btn-create-release").onclick = async () => {
   }
 };
 
+// --- Themes ---
+
+const THEMES = [
+  { id: "harbor", label: "Harbor", dots: ["#10141a", "#f0a63c", "#4cc38a"] },
+  { id: "midnight", label: "Midnight", dots: ["#05070a", "#ffb454", "#3ddc97"] },
+  { id: "daylight", label: "Daylight", dots: ["#f5f3ee", "#b26e08", "#1a7f4e"] },
+  { id: "dusk", label: "Dusk", dots: ["#14121d", "#c99bf5", "#52d49b"] },
+];
+const THEME_CACHE_KEY = "unshipped:theme";
+let currentTheme = localStorage.getItem(THEME_CACHE_KEY) ?? "harbor";
+
+function applyTheme(id: string) {
+  if (!THEMES.some((t) => t.id === id)) id = "harbor";
+  currentTheme = id;
+  document.documentElement.dataset.theme = id;
+  localStorage.setItem(THEME_CACHE_KEY, id);
+}
+
+function renderThemeOptions() {
+  const wrap = $("theme-options");
+  wrap.innerHTML = "";
+  for (const theme of THEMES) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "theme-swatch";
+    btn.setAttribute("role", "radio");
+    btn.setAttribute("aria-checked", String(theme.id === currentTheme));
+    const dots = document.createElement("span");
+    dots.className = "dots";
+    for (const color of theme.dots) {
+      const dot = document.createElement("span");
+      dot.style.background = color;
+      dots.append(dot);
+    }
+    btn.append(dots, document.createTextNode(theme.label));
+    btn.onclick = () => {
+      applyTheme(theme.id);
+      renderThemeOptions();
+      invoke("save_settings", { new: currentSettings() });
+    };
+    wrap.append(btn);
+  }
+}
+
 // --- Settings ---
 
-interface Settings { argo_url: string; argo_insecure: boolean }
+interface Settings { argo_url: string; argo_insecure: boolean; theme: string }
 interface ArgoStatus { username: string | null; applications: number | null }
 
-const settingsDialog = $<HTMLDialogElement>("settings-dialog");
+function showSettingsSection(section: string) {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(".settings-nav button")) {
+    if (btn.dataset.section === section) btn.setAttribute("data-active", "");
+    else btn.removeAttribute("data-active");
+  }
+  for (const panel of document.querySelectorAll<HTMLElement>(".settings-panel")) {
+    panel.hidden = panel.id !== `panel-${section}`;
+  }
+}
 
 function currentSettings(): Settings {
   return {
     argo_url: $<HTMLInputElement>("argo-url").value.trim(),
     argo_insecure: $<HTMLInputElement>("argo-insecure").checked,
+    theme: currentTheme,
   };
 }
 
@@ -572,10 +625,12 @@ function showArgoError(e: unknown) {
 async function openSettings() {
   $("argo-error").hidden = true;
   showArgoConnected(null);
-  settingsDialog.showModal();
+  showSettingsSection("appearance");
+  showView("view-settings");
   const s = await invoke<Settings>("get_settings");
   $<HTMLInputElement>("argo-url").value = s.argo_url;
   $<HTMLInputElement>("argo-insecure").checked = s.argo_insecure;
+  renderThemeOptions();
   try {
     showArgoConnected(await invoke<ArgoStatus | null>("argo_status"));
   } catch (e) {
@@ -612,9 +667,20 @@ $("btn-argo-disconnect").onclick = async () => {
   await invoke("argo_disconnect");
   showArgoConnected(null);
 };
-settingsDialog.addEventListener("close", () => {
+
+function closeSettings() {
   invoke("save_settings", { new: currentSettings() });
-});
+  showView("view-repos");
+}
+
+$("btn-settings-back").onclick = closeSettings;
+for (const btn of document.querySelectorAll<HTMLButtonElement>(".settings-nav button")) {
+  btn.onclick = () => showSettingsSection(btn.dataset.section!);
+}
+
+import("@tauri-apps/api/app").then(async ({ getVersion }) => {
+  $("app-version").textContent = `v${await getVersion()}`;
+}).catch(() => {});
 
 // --- Wiring ---
 
@@ -631,7 +697,9 @@ $("btn-profile").onclick = (e) => {
 };
 document.addEventListener("click", () => setMenu(false));
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") setMenu(false);
+  if (e.key !== "Escape") return;
+  setMenu(false);
+  if (!$("view-settings").hidden) closeSettings();
 });
 
 $("btn-refresh").onclick = loadRepos;
@@ -654,4 +722,9 @@ $<HTMLDialogElement>("release-dialog").addEventListener("close", () => {
   currentBump = null;
 });
 
+applyTheme(currentTheme);
+// settings.json is the source of truth; the localStorage copy only avoids a flash at boot.
+invoke<Settings>("get_settings").then((s) => {
+  if (s.theme !== currentTheme) applyTheme(s.theme);
+});
 checkAuth();

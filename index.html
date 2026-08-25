@@ -61,55 +61,72 @@
         </div>
         <ul id="repo-list" class="ledger"></ul>
       </section>
-    </div>
 
-    <!-- Settings dialog -->
-    <dialog id="settings-dialog">
-      <form method="dialog" class="settings">
-        <header class="release-head">
-          <h2>Settings</h2>
-          <button value="close" class="ghost" type="submit">Close</button>
+      <!-- Settings -->
+      <section id="view-settings" class="view" hidden>
+        <header class="topbar">
+          <button id="btn-settings-back" class="ghost">← Back</button>
+          <h1 class="wordmark">Settings</h1>
         </header>
+        <div class="settings-layout">
+          <nav class="settings-nav" aria-label="Settings sections">
+            <button type="button" data-section="appearance">Appearance</button>
+            <button type="button" data-section="integrations">Integrations</button>
+            <button type="button" data-section="about">About</button>
+          </nav>
+          <div class="settings-content">
+            <section id="panel-appearance" class="settings-panel">
+              <h3>Appearance</h3>
+              <p class="hint">Theme applies immediately and is remembered between sessions.</p>
+              <div id="theme-options" class="theme-options" role="radiogroup" aria-label="Theme"></div>
+            </section>
 
-        <section class="settings-group">
-          <h3>Argo CD</h3>
-          <p class="hint">Connect to your Argo CD server. Used for deployment monitoring.</p>
-          <label class="field">
-            <span>Server URL</span>
-            <input id="argo-url" placeholder="https://argocd.example.com" spellcheck="false" autocomplete="off" />
-          </label>
-          <label class="check">
-            <input type="checkbox" id="argo-insecure" />
-            Allow self-signed TLS certificates
-          </label>
-
-          <div id="argo-connected" hidden>
-            <p id="argo-status-text" class="hint"></p>
-            <button type="button" id="btn-argo-disconnect" class="ghost">Disconnect</button>
-          </div>
-
-          <div id="argo-auth">
-            <div class="two-col">
+            <section id="panel-integrations" class="settings-panel" hidden>
+              <h3>Argo CD</h3>
+              <p class="hint">Connect to your Argo CD server. Used for deployment monitoring.</p>
               <label class="field">
-                <span>Username</span>
-                <input id="argo-user" spellcheck="false" autocomplete="off" />
+                <span>Server URL</span>
+                <input id="argo-url" placeholder="https://argocd.example.com" spellcheck="false" autocomplete="off" />
               </label>
-              <label class="field">
-                <span>Password</span>
-                <input id="argo-pass" type="password" autocomplete="off" />
+              <label class="check">
+                <input type="checkbox" id="argo-insecure" />
+                Allow self-signed TLS certificates
               </label>
-            </div>
-            <button type="button" id="btn-argo-login" class="primary">Connect</button>
-            <p class="hint or-rule">or paste an API token</p>
-            <div class="token-row">
-              <input id="argo-token" type="password" placeholder="Argo CD auth token" autocomplete="off" />
-              <button type="button" id="btn-argo-token">Use token</button>
-            </div>
+
+              <div id="argo-connected" hidden>
+                <p id="argo-status-text" class="hint"></p>
+                <button type="button" id="btn-argo-disconnect" class="ghost">Disconnect</button>
+              </div>
+
+              <div id="argo-auth">
+                <div class="two-col">
+                  <label class="field">
+                    <span>Username</span>
+                    <input id="argo-user" spellcheck="false" autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span>Password</span>
+                    <input id="argo-pass" type="password" autocomplete="off" />
+                  </label>
+                </div>
+                <button type="button" id="btn-argo-login" class="primary">Connect</button>
+                <p class="hint or-rule">or paste an API token</p>
+                <div class="token-row">
+                  <input id="argo-token" type="password" placeholder="Argo CD auth token" autocomplete="off" />
+                  <button type="button" id="btn-argo-token">Use token</button>
+                </div>
+              </div>
+              <p id="argo-error" class="error" hidden></p>
+            </section>
+
+            <section id="panel-about" class="settings-panel" hidden>
+              <h3>About</h3>
+              <p class="hint">unshipped <span id="app-version" class="mono"></span> — GitHub auth via the gh CLI.</p>
+            </section>
           </div>
-          <p id="argo-error" class="error" hidden></p>
-        </section>
-      </form>
-    </dialog>
+        </div>
+      </section>
+    </div>
 
     <!-- Release dialog -->
     <dialog id="release-dialog">

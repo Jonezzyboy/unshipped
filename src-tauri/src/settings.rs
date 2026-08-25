@@ -2,12 +2,24 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use tauri::Manager;
 
-#[derive(Serialize, Deserialize, Default, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Settings {
     #[serde(default)]
     pub argo_url: String,
     #[serde(default)]
     pub argo_insecure: bool,
+    #[serde(default = "default_theme")]
+    pub theme: String,
+}
+
+fn default_theme() -> String {
+    "harbor".into()
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { argo_url: String::new(), argo_insecure: false, theme: default_theme() }
+    }
 }
 
 fn path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {

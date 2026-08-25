@@ -22,6 +22,49 @@
   background: var(--bg);
 }
 
+/* Harbor is the :root default above; themes override the same tokens. */
+html[data-theme="midnight"] {
+  --bg: #05070a;
+  --surface: #0b0e13;
+  --surface-2: #11151c;
+  --line: #1a1f28;
+  --text: #e6ebf2;
+  --muted: #6f7b8c;
+  --lamp: #ffb454;
+  --lamp-hot: #ff6b3d;
+  --ok: #3ddc97;
+  --err: #ff5c57;
+}
+
+html[data-theme="daylight"] {
+  --bg: #f5f3ee;
+  --surface: #ffffff;
+  --surface-2: #eceae3;
+  --line: #dbd6ca;
+  --text: #22272e;
+  --muted: #68707d;
+  --lamp: #b26e08;
+  --lamp-hot: #c2410c;
+  --ok: #1a7f4e;
+  --err: #bf2f27;
+  color-scheme: light;
+}
+
+html[data-theme="dusk"] {
+  --bg: #14121d;
+  --surface: #1b1826;
+  --surface-2: #221e30;
+  --line: #2c2740;
+  --text: #e2ddf0;
+  --muted: #8d86a8;
+  --lamp: #c99bf5;
+  --lamp-hot: #ff6b9d;
+  --ok: #52d49b;
+  --err: #ff5c7a;
+}
+
+html[data-theme="daylight"] button.primary { color: #ffffff; }
+
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; }
 .mono { font-family: var(--mono); }
@@ -281,9 +324,57 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 }
 .bump .suggested { color: var(--lamp); font-size: 0.72rem; }
 
-/* --- Settings dialog --- */
-.settings-group { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 0.4rem; }
-.settings-group h3 { margin: 0 0 0.2rem; font-size: 0.9rem; }
+/* --- Settings view --- */
+.settings-layout {
+  display: flex;
+  gap: 2.5rem;
+  padding: 1.6rem 1.4rem 3rem;
+  max-width: 64rem;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 11rem;
+  flex-shrink: 0;
+}
+.settings-nav button {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0.5em 0.8em;
+  border-radius: 6px;
+  color: var(--muted);
+}
+.settings-nav button:hover { color: var(--text); background: var(--surface); }
+.settings-nav button[data-active] {
+  color: var(--lamp);
+  background: color-mix(in srgb, var(--lamp) 9%, transparent);
+}
+.settings-content { flex: 1; min-width: 0; max-width: 34rem; }
+.settings-panel h3 { margin: 0 0 0.2rem; font-size: 1rem; }
+
+.theme-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin: 0.8rem 0 0.4rem; }
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.7rem 0.4rem;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.theme-swatch[aria-checked="true"] { border-color: var(--lamp); color: var(--text); }
+.theme-swatch .dots { display: flex; gap: 0.25rem; }
+.theme-swatch .dots span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid rgb(128 128 128 / 0.35);
+}
+
 .check { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0 1rem; }
 .check input { width: auto; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
