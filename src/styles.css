@@ -9,6 +9,7 @@
   --lamp-hot: #ff7a45;
   --ok: #4cc38a;
   --err: #e5645f;
+  --on-accent: #171104;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   /* Shared by header and rows — the actions column is fixed so every row's
      fr tracks resolve identically whether or not the row has a button. */
@@ -47,6 +48,7 @@ html[data-theme="daylight"] {
   --lamp-hot: #c2410c;
   --ok: #1a7f4e;
   --err: #bf2f27;
+  --on-accent: #ffffff;
   color-scheme: light;
 }
 
@@ -61,9 +63,65 @@ html[data-theme="dusk"] {
   --lamp-hot: #ff6b9d;
   --ok: #52d49b;
   --err: #ff5c7a;
+  --on-accent: #1c1129;
 }
 
-html[data-theme="daylight"] button.primary { color: #ffffff; }
+html[data-theme="radar"] {
+  --bg: #081209;
+  --surface: #0e1f14;
+  --surface-2: #14291b;
+  --line: #1d3324;
+  --text: #d6ecd9;
+  --muted: #6f8f78;
+  --lamp: #ffc857;
+  --lamp-hot: #ff6b35;
+  --ok: #4ade80;
+  --err: #ff5c57;
+  --on-accent: #14200f;
+}
+
+html[data-theme="signal"] {
+  --bg: #0b1220;
+  --surface: #111a2c;
+  --surface-2: #16233a;
+  --line: #1f3050;
+  --text: #dce7f7;
+  --muted: #7c8db0;
+  --lamp: #4fa3ff;
+  --lamp-hot: #ff6b6b;
+  --ok: #35d0a0;
+  --err: #ff5c7a;
+  --on-accent: #06101f;
+}
+
+html[data-theme="copper"] {
+  --bg: #171210;
+  --surface: #1f1815;
+  --surface-2: #281f1a;
+  --line: #35291f;
+  --text: #ecdfd5;
+  --muted: #9a8878;
+  --lamp: #e2854a;
+  --lamp-hot: #ff5d3a;
+  --ok: #56c489;
+  --err: #e5645f;
+  --on-accent: #211208;
+}
+
+html[data-theme="paper"] {
+  --bg: #f6efdf;
+  --surface: #fdf9ee;
+  --surface-2: #ece2c8;
+  --line: #d9cba6;
+  --text: #3a3226;
+  --muted: #857a63;
+  --lamp: #a05f12;
+  --lamp-hot: #b83c1a;
+  --ok: #3f7d43;
+  --err: #b0322b;
+  --on-accent: #ffffff;
+  color-scheme: light;
+}
 
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; }
@@ -92,7 +150,7 @@ button:hover { border-color: var(--muted); }
 button.primary {
   background: var(--lamp);
   border-color: var(--lamp);
-  color: #171104;
+  color: var(--on-accent);
   font-weight: 600;
 }
 button.primary:hover { filter: brightness(1.08); }

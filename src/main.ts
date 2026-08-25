@@ -547,6 +547,10 @@ const THEMES = [
   { id: "midnight", label: "Midnight", dots: ["#05070a", "#ffb454", "#3ddc97"] },
   { id: "daylight", label: "Daylight", dots: ["#f5f3ee", "#b26e08", "#1a7f4e"] },
   { id: "dusk", label: "Dusk", dots: ["#14121d", "#c99bf5", "#52d49b"] },
+  { id: "radar", label: "Radar", dots: ["#081209", "#ffc857", "#4ade80"] },
+  { id: "signal", label: "Signal", dots: ["#0b1220", "#4fa3ff", "#35d0a0"] },
+  { id: "copper", label: "Copper", dots: ["#171210", "#e2854a", "#56c489"] },
+  { id: "paper", label: "Paper", dots: ["#f6efdf", "#a05f12", "#3f7d43"] },
 ];
 const THEME_CACHE_KEY = "unshipped:theme";
 let currentTheme = localStorage.getItem(THEME_CACHE_KEY) ?? "harbor";
