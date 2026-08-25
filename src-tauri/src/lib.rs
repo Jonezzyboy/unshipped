@@ -1,9 +1,70 @@
+mod argo;
 mod auth;
 mod github;
+mod settings;
+mod store;
 mod version;
 
 use auth::token;
 use serde::Serialize;
+
+const ARGO_TOKEN_KEY: &str = "argo_token";
+
+#[tauri::command]
+fn get_settings(app: tauri::AppHandle) -> settings::Settings {
+    settings::load(&app)
+}
+
+#[tauri::command]
+fn save_settings(app: tauri::AppHandle, new: settings::Settings) -> Result<(), String> {
+    settings::save(&app, &new)
+}
+
+fn argo_config(app: &tauri::AppHandle) -> Result<settings::Settings, String> {
+    let s = settings::load(app);
+    if s.argo_url.trim().is_empty() {
+        return Err("Set the Argo CD server URL first.".into());
+    }
+    Ok(s)
+}
+
+#[tauri::command]
+async fn argo_login(
+    app: tauri::AppHandle,
+    username: String,
+    password: String,
+) -> Result<argo::ArgoStatus, String> {
+    let s = argo_config(&app)?;
+    let token = argo::login(&s.argo_url, s.argo_insecure, &username, &password).await?;
+    let status = argo::status(&s.argo_url, s.argo_insecure, &token).await?;
+    store::set(ARGO_TOKEN_KEY, &token)?;
+    Ok(status)
+}
+
+#[tauri::command]
+async fn argo_set_token(app: tauri::AppHandle, token: String) -> Result<argo::ArgoStatus, String> {
+    let s = argo_config(&app)?;
+    let status = argo::status(&s.argo_url, s.argo_insecure, token.trim()).await?;
+    store::set(ARGO_TOKEN_KEY, token.trim())?;
+    Ok(status)
+}
+
+#[tauri::command]
+async fn argo_status(app: tauri::AppHandle) -> Result<Option<argo::ArgoStatus>, String> {
+    let s = settings::load(&app);
+    let Some(token) = store::get(ARGO_TOKEN_KEY) else {
+        return Ok(None);
+    };
+    if s.argo_url.trim().is_empty() {
+        return Ok(None);
+    }
+    argo::status(&s.argo_url, s.argo_insecure, &token).await.map(Some)
+}
+
+#[tauri::command]
+fn argo_disconnect() -> Result<(), String> {
+    store::delete(ARGO_TOKEN_KEY)
+}
 
 #[derive(Serialize)]
 struct AuthStatus {
@@ -163,6 +224,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             auth_status,
+            get_settings,
+            save_settings,
+            argo_login,
+            argo_set_token,
+            argo_status,
+            argo_disconnect,
             list_repos,
             repo_status,
             prepare_release,

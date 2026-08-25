@@ -27,9 +27,19 @@
           <h1 class="wordmark">unshipped<span class="mark-dot">.</span></h1>
           <input id="search" placeholder="Filter repos…" spellcheck="false" />
           <div class="topbar-right">
-            <button id="btn-refresh" class="ghost" title="Reload repos">Refresh</button>
-            <img id="avatar" class="avatar" alt="" />
-            <span id="username" class="mono"></span>
+            <div class="profile-menu">
+              <button id="btn-profile" class="ghost profile-btn" aria-haspopup="menu" aria-expanded="false">
+                <img id="avatar" class="avatar" alt="" />
+                <span id="username" class="mono"></span>
+                <svg class="chev" aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+              <div id="profile-dropdown" class="dropdown" role="menu" hidden>
+                <button type="button" id="btn-refresh" role="menuitem">Refresh repos</button>
+                <button type="button" id="btn-settings" role="menuitem">Settings…</button>
+              </div>
+            </div>
           </div>
         </header>
         <div class="filterbar">
@@ -38,9 +48,64 @@
           <div class="chips" id="status-chips" role="group" aria-label="Filter by status"></div>
         </div>
         <p id="repo-summary" class="summary"></p>
+        <div class="ledger-head" id="ledger-head" aria-hidden="false">
+          <button data-sort="name">Repo</button>
+          <button data-sort="waiting">Waiting</button>
+          <button data-sort="tag">Release</button>
+          <button data-sort="released">Released</button>
+          <span></span>
+        </div>
         <ul id="repo-list" class="ledger"></ul>
       </section>
     </div>
+
+    <!-- Settings dialog -->
+    <dialog id="settings-dialog">
+      <form method="dialog" class="settings">
+        <header class="release-head">
+          <h2>Settings</h2>
+          <button value="close" class="ghost" type="submit">Close</button>
+        </header>
+
+        <section class="settings-group">
+          <h3>Argo CD</h3>
+          <p class="hint">Connect to your Argo CD server. Used for deployment monitoring.</p>
+          <label class="field">
+            <span>Server URL</span>
+            <input id="argo-url" placeholder="https://argocd.example.com" spellcheck="false" autocomplete="off" />
+          </label>
+          <label class="check">
+            <input type="checkbox" id="argo-insecure" />
+            Allow self-signed TLS certificates
+          </label>
+
+          <div id="argo-connected" hidden>
+            <p id="argo-status-text" class="hint"></p>
+            <button type="button" id="btn-argo-disconnect" class="ghost">Disconnect</button>
+          </div>
+
+          <div id="argo-auth">
+            <div class="two-col">
+              <label class="field">
+                <span>Username</span>
+                <input id="argo-user" spellcheck="false" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>Password</span>
+                <input id="argo-pass" type="password" autocomplete="off" />
+              </label>
+            </div>
+            <button type="button" id="btn-argo-login" class="primary">Connect</button>
+            <p class="hint or-rule">or paste an API token</p>
+            <div class="token-row">
+              <input id="argo-token" type="password" placeholder="Argo CD auth token" autocomplete="off" />
+              <button type="button" id="btn-argo-token">Use token</button>
+            </div>
+          </div>
+          <p id="argo-error" class="error" hidden></p>
+        </section>
+      </form>
+    </dialog>
 
     <!-- Release dialog -->
     <dialog id="release-dialog">

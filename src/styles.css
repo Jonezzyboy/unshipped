@@ -10,6 +10,9 @@
   --ok: #4cc38a;
   --err: #e5645f;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* Shared by header and rows — the actions column is fixed so every row's
+     fr tracks resolve identically whether or not the row has a button. */
+  --ledger-cols: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem 8rem;
 
   color-scheme: dark;
   font-family: -apple-system, "Avenir Next", system-ui, sans-serif;
@@ -105,9 +108,41 @@ a:hover { text-decoration: underline; }
   z-index: 2;
 }
 .topbar #search { max-width: 18rem; }
-.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; }
 .avatar { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); }
 #username { color: var(--muted); font-size: 0.85rem; }
+
+.profile-menu { position: relative; }
+.profile-btn { display: flex; align-items: center; gap: 0.55rem; border: none; padding: 0.25em 0.4em; }
+.profile-btn .chev { color: var(--muted); transition: transform 0.15s ease; }
+.profile-btn:hover .chev, .profile-btn[aria-expanded="true"] .chev { color: var(--text); }
+.profile-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.profile-btn:hover #username, .profile-btn[aria-expanded="true"] #username { color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+  .profile-btn .chev { transition: none; }
+}
+.dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 11rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.3rem;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.4);
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+}
+.dropdown button {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0.45em 0.7em;
+  border-radius: 5px;
+}
+.dropdown button:hover { background: var(--surface); }
 .summary { color: var(--muted); font-size: 0.82rem; padding: 0.7rem 1.4rem 0; margin: 0; }
 
 .filterbar {
@@ -135,12 +170,33 @@ a:hover { text-decoration: underline; }
 
 .ledger {
   list-style: none;
-  margin: 0.5rem 0 3rem;
+  margin: 0 0 3rem;
   padding: 0 1.4rem;
 }
+.ledger-head {
+  display: grid;
+  grid-template-columns: var(--ledger-cols);
+  gap: 1rem;
+  padding: 0.6rem 1.9rem 0.2rem;
+}
+.ledger-head button {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  justify-self: start;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.ledger-head button:hover { color: var(--text); }
+.ledger-head button[data-active] { color: var(--lamp); }
+.ledger-head button[data-active]::after { content: " ↓"; }
+.ledger-head button[data-active="asc"]::after { content: " ↑"; }
 .repo-row {
   display: grid;
-  grid-template-columns: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem auto;
+  grid-template-columns: var(--ledger-cols);
   gap: 1rem;
   align-items: center;
   padding: 0.65rem 0.5rem;
@@ -216,6 +272,17 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 }
 .bump .suggested { color: var(--lamp); font-size: 0.72rem; }
 
+/* --- Settings dialog --- */
+.settings-group { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 0.4rem; }
+.settings-group h3 { margin: 0 0 0.2rem; font-size: 0.9rem; }
+.check { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0 1rem; }
+.check input { width: auto; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+.or-rule { margin: 1rem 0 0.4rem; }
+.token-row { display: flex; gap: 0.6rem; }
+#argo-connected { margin: 0.8rem 0; }
+#argo-status-text { color: var(--ok); }
+
 #rel-commits-wrap { margin: 0.6rem 0; }
 #rel-commits-wrap summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
 .commits {
@@ -234,8 +301,9 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 .release-foot { display: flex; align-items: center; gap: 1rem; margin-top: 0.4rem; }
 
 @media (max-width: 640px) {
-  .repo-row { grid-template-columns: 1fr auto; }
-  .repo-tag, .repo-age { display: none; }
+  .repo-row, .ledger-head { grid-template-columns: 1fr auto auto; }
+  .repo-tag, .repo-age,
+  .ledger-head [data-sort="tag"], .ledger-head [data-sort="released"] { display: none; }
   .topbar { flex-wrap: wrap; }
 }
 

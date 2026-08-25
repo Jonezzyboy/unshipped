@@ -222,14 +222,43 @@ function searchedRepos(): Repo[] {
   return allRepos.filter((r) => r.full_name.toLowerCase().includes(q));
 }
 
+type SortKey = "name" | "waiting" | "tag" | "released";
+let sortKey: SortKey = "waiting";
+let sortDir: 1 | -1 = -1;
+const defaultDirs: Record<SortKey, 1 | -1> = { name: 1, waiting: -1, tag: 1, released: -1 };
+
+function compareRepos(a: Repo, b: Repo): number {
+  const sa = statuses.get(a.full_name);
+  const sb = statuses.get(b.full_name);
+  let cmp = 0;
+  switch (sortKey) {
+    case "name":
+      cmp = a.full_name.localeCompare(b.full_name);
+      break;
+    case "waiting":
+      cmp = (sa?.ahead_by ?? -2) - (sb?.ahead_by ?? -2);
+      break;
+    case "tag":
+      cmp = (sa?.latest_tag ?? "").localeCompare(sb?.latest_tag ?? "", undefined, { numeric: true });
+      break;
+    case "released":
+      cmp = (sa?.published_at ?? "").localeCompare(sb?.published_at ?? "");
+      break;
+  }
+  return cmp * sortDir || a.full_name.localeCompare(b.full_name);
+}
+
+function updateSortHeader() {
+  for (const btn of document.querySelectorAll<HTMLButtonElement>("#ledger-head button")) {
+    if (btn.dataset.sort === sortKey) btn.setAttribute("data-active", sortDir === 1 ? "asc" : "desc");
+    else btn.removeAttribute("data-active");
+  }
+}
+
 function sortedRepos(): Repo[] {
   return searchedRepos()
     .filter((r) => matchesOwner(r) && matchesStatus(r, statusFilter))
-    .sort((a, b) => {
-      const sa = statuses.get(a.full_name)?.ahead_by ?? -2;
-      const sb = statuses.get(b.full_name)?.ahead_by ?? -2;
-      return sb - sa || a.full_name.localeCompare(b.full_name);
-    });
+    .sort(compareRepos);
 }
 
 function chip(label: string, count: number | null, pressed: boolean, onClick: () => void): HTMLButtonElement {
@@ -511,11 +540,119 @@ $("btn-create-release").onclick = async () => {
   }
 };
 
+// --- Settings ---
+
+interface Settings { argo_url: string; argo_insecure: boolean }
+interface ArgoStatus { username: string | null; applications: number | null }
+
+const settingsDialog = $<HTMLDialogElement>("settings-dialog");
+
+function currentSettings(): Settings {
+  return {
+    argo_url: $<HTMLInputElement>("argo-url").value.trim(),
+    argo_insecure: $<HTMLInputElement>("argo-insecure").checked,
+  };
+}
+
+function showArgoConnected(status: ArgoStatus | null) {
+  $("argo-connected").hidden = !status;
+  $("argo-auth").hidden = !!status;
+  if (status) {
+    const apps = status.applications === null ? "" : ` · ${status.applications} applications`;
+    $("argo-status-text").textContent = `Connected as ${status.username ?? "unknown"}${apps}`;
+  }
+}
+
+function showArgoError(e: unknown) {
+  const el = $("argo-error");
+  el.textContent = String(e);
+  el.hidden = false;
+}
+
+async function openSettings() {
+  $("argo-error").hidden = true;
+  showArgoConnected(null);
+  settingsDialog.showModal();
+  const s = await invoke<Settings>("get_settings");
+  $<HTMLInputElement>("argo-url").value = s.argo_url;
+  $<HTMLInputElement>("argo-insecure").checked = s.argo_insecure;
+  try {
+    showArgoConnected(await invoke<ArgoStatus | null>("argo_status"));
+  } catch (e) {
+    showArgoError(e);
+  }
+}
+
+async function argoConnect(action: () => Promise<ArgoStatus>) {
+  $("argo-error").hidden = true;
+  try {
+    await invoke("save_settings", { new: currentSettings() });
+    showArgoConnected(await action());
+  } catch (e) {
+    showArgoError(e);
+  }
+}
+
+$("btn-settings").onclick = () => {
+  setMenu(false);
+  openSettings();
+};
+$("btn-argo-login").onclick = () =>
+  argoConnect(() =>
+    invoke<ArgoStatus>("argo_login", {
+      username: $<HTMLInputElement>("argo-user").value.trim(),
+      password: $<HTMLInputElement>("argo-pass").value,
+    })
+  );
+$("btn-argo-token").onclick = () =>
+  argoConnect(() =>
+    invoke<ArgoStatus>("argo_set_token", { token: $<HTMLInputElement>("argo-token").value })
+  );
+$("btn-argo-disconnect").onclick = async () => {
+  await invoke("argo_disconnect");
+  showArgoConnected(null);
+};
+settingsDialog.addEventListener("close", () => {
+  invoke("save_settings", { new: currentSettings() });
+});
+
 // --- Wiring ---
 
-$("btn-refresh").onclick = loadRepos;
+const profileDropdown = $("profile-dropdown");
+
+function setMenu(open: boolean) {
+  profileDropdown.hidden = !open;
+  $("btn-profile").setAttribute("aria-expanded", String(open));
+}
+
+$("btn-profile").onclick = (e) => {
+  e.stopPropagation();
+  setMenu(Boolean(profileDropdown.hidden));
+};
+document.addEventListener("click", () => setMenu(false));
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") setMenu(false);
+});
+
+$("btn-refresh").onclick = () => {
+  setMenu(false);
+  loadRepos();
+};
 $("search").oninput = resetAndRender;
 $("btn-retry").onclick = checkAuth;
+for (const btn of document.querySelectorAll<HTMLButtonElement>("#ledger-head button")) {
+  btn.onclick = () => {
+    const key = btn.dataset.sort as SortKey;
+    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+    else {
+      sortKey = key;
+      sortDir = defaultDirs[key];
+    }
+    updateSortHeader();
+    resetAndRender();
+  };
+}
+updateSortHeader();
 $<HTMLDialogElement>("release-dialog").addEventListener("close", () => {
   currentBump = null;
 });
