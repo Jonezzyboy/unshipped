@@ -266,9 +266,27 @@ function matchesStatus(repo: Repo, filter: StatusFilter): boolean {
   }
 }
 
+// --- Pins: shown in their own section above the list, unaffected by search/filters ---
+
+const PINS_KEY = "unshipped:pins:v1";
+let pinnedSet = new Set<string>();
+
+function togglePin(repo: Repo) {
+  if (pinnedSet.has(repo.full_name)) pinnedSet.delete(repo.full_name);
+  else pinnedSet.add(repo.full_name);
+  localStorage.setItem(cacheKey(PINS_KEY), JSON.stringify([...pinnedSet]));
+  renderRepos();
+}
+
+function pinnedRepos(): Repo[] {
+  return allRepos.filter((r) => pinnedSet.has(r.full_name)).sort(compareRepos);
+}
+
 function searchedRepos(): Repo[] {
   const q = $<HTMLInputElement>("search").value.toLowerCase();
-  return allRepos.filter((r) => r.full_name.toLowerCase().includes(q));
+  return allRepos.filter(
+    (r) => !pinnedSet.has(r.full_name) && r.full_name.toLowerCase().includes(q)
+  );
 }
 
 type SortKey = "name" | "waiting" | "tag" | "released" | "deployed";
@@ -380,24 +398,43 @@ function resetAndRender() {
   summarize();
 }
 
+function buildRow(repo: Repo): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "repo-row";
+  li.append(
+    rowName(repo),
+    rowLamp(repo),
+    rowTag(repo),
+    rowAge(repo),
+    rowDeploy(repo),
+    rowActions(repo),
+  );
+  return li;
+}
+
+function sectionLabel(text: string): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "section-label";
+  li.textContent = text;
+  return li;
+}
+
 function renderRepos() {
   renderFilters();
   sentinelObserver.disconnect();
   const list = $("repo-list");
   list.innerHTML = "";
+
+  const pins = pinnedRepos();
+  if (pins.length) {
+    list.append(sectionLabel("Pinned"));
+    for (const repo of pins) list.append(buildRow(repo));
+    list.append(sectionLabel("All repos"));
+  }
+
   const repos = sortedRepos();
   for (const repo of repos.slice(0, visibleLimit)) {
-    const li = document.createElement("li");
-    li.className = "repo-row";
-    li.append(
-      rowName(repo),
-      rowLamp(repo),
-      rowTag(repo),
-      rowAge(repo),
-      rowDeploy(repo),
-      rowActions(repo),
-    );
-    list.append(li);
+    list.append(buildRow(repo));
   }
   if (repos.length > visibleLimit) {
     const sentinel = document.createElement("li");
@@ -482,9 +519,14 @@ function rowDeploy(repo: Repo): HTMLElement {
   return el;
 }
 
+const PIN_SVG =
+  '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">' +
+  '<path d="M4.456.734a1.75 1.75 0 0 1 2.826.504l.613 1.327a3.08 3.08 0 0 0 2.084 1.707l2.454.584c1.332.317 1.8 1.972.832 2.94L11.06 10l3.72 3.72a.75.75 0 1 1-1.061 1.06L10 11.06l-2.204 2.205c-.968.968-2.623.5-2.94-.832l-.584-2.454a3.08 3.08 0 0 0-1.707-2.084l-1.327-.613a1.75 1.75 0 0 1-.504-2.826L4.456.734Z"/></svg>';
+
 function rowActions(repo: Repo): HTMLElement {
   const el = document.createElement("span");
   el.className = "actions";
+
   const status = statuses.get(repo.full_name);
   if (status && status.ahead_by > 0) {
     const btn = document.createElement("button");
@@ -492,6 +534,15 @@ function rowActions(repo: Repo): HTMLElement {
     btn.onclick = () => openReleaseDialog(repo);
     el.append(btn);
   }
+
+  const isPinned = pinnedSet.has(repo.full_name);
+  const pin = document.createElement("button");
+  pin.className = "pin";
+  pin.innerHTML = PIN_SVG;
+  pin.title = isPinned ? "Unpin" : "Pin to top";
+  pin.setAttribute("aria-pressed", String(isPinned));
+  pin.onclick = () => togglePin(repo);
+  el.append(pin);
   return el;
 }
 
@@ -846,5 +897,6 @@ invoke<Settings>("get_settings").then((s) => {
 (async () => {
   demoMode = await invoke<boolean>("is_demo").catch(() => false);
   statusCache = readCache<Record<string, CachedStatus>>(cacheKey(STATUS_KEY)) ?? {};
+  pinnedSet = new Set(readCache<string[]>(cacheKey(PINS_KEY)) ?? []);
   checkAuth();
 })();

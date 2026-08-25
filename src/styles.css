@@ -13,7 +13,7 @@
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   /* Shared by header and rows — the actions column is fixed so every row's
      fr tracks resolve identically whether or not the row has a button. */
-  --ledger-cols: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem minmax(8rem, 1fr) 8rem;
+  --ledger-cols: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem minmax(8rem, 1fr) 10rem;
 
   color-scheme: dark;
   font-family: -apple-system, "Avenir Next", system-ui, sans-serif;
@@ -317,8 +317,33 @@ a:hover { text-decoration: underline; }
 .repo-name .owner { color: var(--muted); font-weight: 400; }
 .repo-tag, .repo-age { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); }
 .repo-tag a { color: inherit; }
-.repo-row .actions { text-align: right; }
+.repo-row .actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.8rem;
+}
 .repo-row .actions button { font-size: 0.82rem; padding: 0.3em 0.8em; }
+.repo-row .actions .pin {
+  background: none;
+  border: none;
+  padding: 0.25em 0.35em;
+  color: var(--muted);
+  opacity: 0;
+}
+.repo-row:hover .actions .pin,
+.repo-row .actions .pin:focus-visible { opacity: 0.7; }
+.repo-row .actions .pin:hover { opacity: 1; color: var(--text); }
+.repo-row .actions .pin[aria-pressed="true"] { opacity: 1; color: var(--lamp); }
+
+.section-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  padding: 1rem 0.5rem 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
 .load-more {
   padding: 1rem 0.5rem;
   text-align: center;
