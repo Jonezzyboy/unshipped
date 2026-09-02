@@ -14,14 +14,37 @@ Requirements: `gh` installed and signed in (`gh auth login`).
 
 ```sh
 npm install
-npm run tauri dev
+npm start
 ```
 
-Build a distributable app with `npm run tauri build`.
+`npm start` runs the app from source with hot reload.
+
+## Install as an app
+
+```sh
+npm run app
+```
+
+Builds a release bundle, copies `unshipped.app` into `/Applications`, and opens it. After that it launches like any other Mac app — no terminal needed.
+
+- `npm run bundle` — build the `.app` only (`src-tauri/target/release/bundle/macos/`).
+- `npm run bundle:dmg` — also produce a `.dmg` for sharing.
+
+The bundle is unsigned (ad-hoc, Apple Silicon only), so it runs on this machine but is not distributable as-is — see below.
+
+## Distribution
+
+Sending the `.dmg` to someone else needs, in order of increasing effort:
+
+1. **`codesign --force --deep -s - unshipped.app`** — repairs the bundle seal. Without it macOS calls the app "damaged" and refuses to open it at all. With it, the recipient gets the normal "unidentified developer" block, clearable via right-click → Open.
+2. **Developer ID signature + notarisation** — required for it to just open. Needs a paid Apple Developer account; set `bundle.macOS.signingIdentity` in `src-tauri/tauri.conf.json` plus `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` for `tauri build`.
+3. **Universal binary** — the current build is `arm64` only. `tauri build --target universal-apple-darwin` covers Intel Macs.
+
+Recipients also need `gh` installed and signed in; the app has no login of its own.
 
 ### Demo mode
 
-`npm run tauri:demo` (or any launch with `UNSHIPPED_DEMO=1`) runs the full UI against canned data — no gh, GitHub, or Argo needed. Repos, statuses, release prep/notes, and Argo deployments are all faked, and the demo uses a separate cache namespace so it never pollutes real data.
+`npm run start:demo` (or any launch with `UNSHIPPED_DEMO=1`) runs the full UI against canned data — no gh, GitHub, or Argo needed. Repos, statuses, release prep/notes, and Argo deployments are all faked, and the demo uses a separate cache namespace so it never pollutes real data.
 
 ## How it works
 
