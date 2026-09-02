@@ -173,8 +173,16 @@
           <p id="rel-error" class="error" hidden></p>
           <footer class="release-foot">
             <button id="btn-create-release" class="primary" type="button">Create release</button>
-            <a id="rel-done-link" target="_blank" hidden>View release on GitHub →</a>
           </footer>
+        </div>
+        <div id="rel-success" class="rel-success" hidden>
+          <svg class="tick" viewBox="0 0 24 24" width="34" height="34" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" />
+            <path d="M7.5 12.4l3 3 6-6.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <p id="rel-success-msg"></p>
+          <a id="rel-done-link" href="#">View release on GitHub →</a>
+          <p id="rel-close-hint" class="hint"></p>
         </div>
       </form>
     </dialog>

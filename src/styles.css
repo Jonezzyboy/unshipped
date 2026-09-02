@@ -125,6 +125,8 @@ html[data-theme="paper"] {
 
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; }
+/* WKWebView rubber-bands past the last row, which reads as an endless list. */
+html, body { overscroll-behavior: none; }
 .mono { font-family: var(--mono); }
 [hidden] { display: none !important; }
 
@@ -350,6 +352,17 @@ a:hover { text-decoration: underline; }
   color: var(--muted);
   font-size: 0.8rem;
 }
+
+.rel-success {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  padding: 2.5rem 1rem 2rem;
+  text-align: center;
+}
+.rel-success .tick { color: var(--ok); }
+#rel-success-msg { margin: 0; font-weight: 550; }
+#rel-close-hint { margin: 0.4rem 0 0; }
 
 /* Signature: the cargo lamp. Heat scales with how much is waiting. */
 .lamp {

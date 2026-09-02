@@ -553,11 +553,14 @@ let currentBump: { repo: Repo; prep: ReleasePrep; tag: string } | null = null;
 async function openReleaseDialog(repo: Repo) {
   const dialog = $<HTMLDialogElement>("release-dialog");
   $("rel-title").textContent = repo.full_name;
+  cancelAutoClose();
   $("rel-loading").hidden = false;
   $("rel-body").hidden = true;
   $("rel-error").hidden = true;
-  $<HTMLAnchorElement>("rel-done-link").hidden = true;
-  $<HTMLButtonElement>("btn-create-release").disabled = false;
+  $("rel-success").hidden = true;
+  const createBtn = $<HTMLButtonElement>("btn-create-release");
+  createBtn.disabled = false;
+  createBtn.textContent = "Create release";
   dialog.showModal();
 
   try {
@@ -640,6 +643,38 @@ function showRelError(e: unknown) {
   el.hidden = false;
 }
 
+const AUTO_CLOSE_SECONDS = 5;
+let autoCloseTimer: number | undefined;
+
+function cancelAutoClose() {
+  clearInterval(autoCloseTimer);
+  autoCloseTimer = undefined;
+}
+
+function showReleaseSuccess(repo: Repo, tag: string, url: string) {
+  $("rel-body").hidden = true;
+  $("rel-loading").hidden = true;
+  $("rel-success").hidden = false;
+  $("rel-success-msg").textContent = `${repo.full_name} ${tag} released`;
+
+  const link = $<HTMLAnchorElement>("rel-done-link");
+  // Opening the release cancels the countdown — the dialog shouldn't vanish mid-read.
+  link.onclick = (e) => { e.preventDefault(); cancelAutoClose(); $("rel-close-hint").textContent = ""; openUrl(url); };
+
+  const hint = $("rel-close-hint");
+  let left = AUTO_CLOSE_SECONDS;
+  hint.textContent = `Closing in ${left}…`;
+  autoCloseTimer = setInterval(() => {
+    left -= 1;
+    if (left > 0) {
+      hint.textContent = `Closing in ${left}…`;
+      return;
+    }
+    cancelAutoClose();
+    $<HTMLDialogElement>("release-dialog").close();
+  }, 1000);
+}
+
 $("btn-create-release").onclick = async () => {
   if (!currentBump) return;
   const { repo, tag } = currentBump;
@@ -656,10 +691,7 @@ $("btn-create-release").onclick = async () => {
       name: $<HTMLInputElement>("rel-name").value || tag,
       body: $<HTMLTextAreaElement>("rel-notes").value,
     });
-    btn.textContent = "Released ✓";
-    const link = $<HTMLAnchorElement>("rel-done-link");
-    link.hidden = false;
-    link.onclick = (e) => { e.preventDefault(); openUrl(url); };
+    showReleaseSuccess(repo, tag, url);
     // Refresh this repo's row — it just shipped.
     const status = await invoke<RepoStatus>("repo_status", {
       owner: repo.owner.login,
@@ -887,6 +919,7 @@ for (const btn of document.querySelectorAll<HTMLButtonElement>("#ledger-head but
 updateSortHeader();
 $<HTMLDialogElement>("release-dialog").addEventListener("close", () => {
   currentBump = null;
+  cancelAutoClose();
 });
 
 applyTheme(currentTheme);
