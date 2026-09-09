@@ -102,15 +102,18 @@ pub fn notes(repo: &str, tag: &str) -> (String, String) {
 fn app(name: &str, repo: &str, sync: &str, health: &str, rev: &str) -> argo::App {
     argo::App {
         name: name.into(),
+        repo: Some(repo.to_lowercase()),
+        linked_by: Some("source"),
         repo_urls: vec![format!("https://github.com/{repo}.git")],
         sync: sync.into(),
         health: health.into(),
         revision: Some(rev.into()),
+        url: format!("https://argocd.demo.invalid/applications/{name}"),
     }
 }
 
 pub fn argo_apps() -> Vec<argo::App> {
-    vec![
+    let mut apps = vec![
         app("payment-gateway-dev", "acme/payment-gateway", "Synced", "Healthy", "9f21c4a"),
         app("payment-gateway-prod", "acme/payment-gateway", "Synced", "Healthy", "9f21c4a"),
         app("billing-api-dev", "acme/billing-api", "OutOfSync", "Progressing", "e77d210"),
@@ -118,5 +121,32 @@ pub fn argo_apps() -> Vec<argo::App> {
         app("webhook-relay-prod", "acme/webhook-relay", "Synced", "Degraded", "41c0d2e"),
         app("vault-service-prod", "acme/vault-service", "Synced", "Healthy", "cc01f83"),
         app("monolith-dev", "kitefin/monolith", "OutOfSync", "Missing", "0d44b17"),
-    ]
+    ];
+
+    // Deployed from a chart repo, pointed at its GitHub repo by the annotation.
+    let mut annotated = app("proto-schemas-prod", "nimbus-labs/proto-schemas", "Synced", "Healthy", "7ab3f01");
+    annotated.linked_by = Some("annotation");
+    annotated.repo_urls = vec!["https://charts.acme.example.com".into()];
+    apps.push(annotated);
+
+    // Nothing says which repo this one comes from — the case settings exists to surface.
+    let mut orphan = app("legacy-cron", "acme/legacy-cron", "Synced", "Healthy", "5d1e88b");
+    orphan.repo = None;
+    orphan.linked_by = None;
+    orphan.repo_urls = vec!["https://charts.acme.example.com".into()];
+    apps.push(orphan);
+
+    apps
+}
+
+pub fn argo_check() -> argo::Check {
+    argo::Check {
+        configured: true,
+        reachable: true,
+        logged_in: true,
+        username: Some("demo".into()),
+        auth: Some("token"),
+        error: None,
+        apps: Some(argo::report(&argo_apps())),
+    }
 }

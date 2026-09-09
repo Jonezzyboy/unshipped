@@ -56,9 +56,55 @@ Recipients also need `gh` installed and signed in; the app has no login of its o
 
 ## Settings
 
-⚙ Settings (topbar) holds the Argo CD connection for deployment monitoring: server URL, optional self-signed-TLS allowance, and auth via username/password (exchanged for a session token) or a pasted API token. The token lives in the OS keychain; the rest in `settings.json` under the app config dir.
+⚙ Settings → **Appearance** picks the theme. ⚙ Settings → **Integrations** holds the Argo CD
+connection that drives the Deployed column, laid out as the three things that have to line up.
+**Check setup** runs all three and marks each one.
 
-- **Deployed column** — Argo CD applications are matched to repos by their git source URL; the column shows worst health + sync state across a repo's apps (hover for the per-app breakdown).
+### 1 — Reach the server
+
+The URL you open the Argo CD web UI on. Tick **Allow self-signed TLS certificates** for a cluster-internal
+CA, and **Server sits behind Google IAP** if an Identity-Aware Proxy fronts it.
+
+IAP needs the OAuth client ID of the IAP-protected resource, and optionally a service account to
+impersonate. Identity tokens are minted from your local `gcloud` login (`gcloud auth login` must have
+been run on this machine) and refreshed hourly. They go out as `Proxy-Authorization`, leaving
+`Authorization` free for Argo's own credential.
+
+### 2 — Sign in to Argo CD
+
+IAP only gets the request through the proxy; Argo CD still wants an identity of its own. Either
+username/password (exchanged for a session token) or a pasted API token. On an SSO-only server there
+is no local password — create a token under *Settings → Accounts → your account → Generate New*.
+
+The account needs `applications, get` and `applications, list`. Whatever you use is stored in the OS
+keychain; the rest lives in `settings.json` under the app config dir.
+
+### 3 — Link applications to repos
+
+An Argo CD application shows up on a repo's row when one of its sources' `repoURL` resolves to that
+GitHub repo — `https://`, `ssh://` and `git@host:owner/repo.git` all work, on GitHub.com or Enterprise.
+
+When the source isn't the repo — a chart repo, a config mirror, one repo split across several apps —
+say so on the **Argo side** by annotating the Application:
+
+```yaml
+metadata:
+  annotations:
+    unshipped.dev/repo: acme/billing-api
+```
+
+An annotation always wins over the source URL.
+
+The step reports how many applications are visible, how many linked, and to how many repos — and
+lists the unlinked ones with the source URL each was judged on, so a mismatch is visible rather than
+just an empty column.
+
+### Reading the Deployed column
+
+Worst health plus sync state across every application matched to that repo; hover for the per-app
+breakdown, click to open the worst one in Argo CD. The column is hidden entirely when no Argo CD
+server is configured, and a banner appears above the list if one is configured but not answering —
+so a blank cell always means "nothing deploys this repo", never "the integration is broken".
 
 ## Later
 

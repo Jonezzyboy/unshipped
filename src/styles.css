@@ -471,17 +471,79 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   border: 1px solid rgb(128 128 128 / 0.35);
 }
 
-.check { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0 1rem; }
+.check { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0; }
 .check input { width: auto; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
 .or-rule { margin: 1rem 0 0.4rem; }
-.iap-block { margin: 0.4rem 0 1rem; }
-.iap-block summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
-.iap-block[open] summary { color: var(--text); }
-#btn-argo-test { margin-bottom: 0.8rem; }
 .token-row { display: flex; gap: 0.6rem; }
-#argo-connected { margin: 0.8rem 0; }
-#argo-status-text { color: var(--ok); }
+
+/* --- Argo setup steps --- */
+.steps { list-style: none; margin: 1.2rem 0 1rem; padding: 0; }
+.step {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.7rem;
+}
+.step-head { display: flex; align-items: center; gap: 0.6rem; }
+.step-head h4 { margin: 0; font-size: 0.92rem; font-weight: 600; }
+.step-num {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.step-state { margin-left: auto; font-size: 0.78rem; color: var(--muted); text-align: right; }
+.step[data-state="ok"] .step-num { border-color: var(--ok); color: var(--ok); }
+.step[data-state="ok"] .step-state { color: var(--ok); }
+.step[data-state="todo"] .step-num { border-color: var(--lamp); color: var(--lamp); }
+.step[data-state="todo"] .step-state { color: var(--lamp); }
+.step[data-state="bad"] .step-num { border-color: var(--err); color: var(--err); }
+.step[data-state="bad"] .step-state { color: var(--err); }
+.step-body { margin-top: 0.7rem; }
+.step-body > .hint:first-child { margin-top: 0; }
+.sub-block {
+  margin: 0.2rem 0 0.6rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--line);
+}
+.snippet {
+  margin: 0.7rem 0;
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  overflow-x: auto;
+}
+#match-report { margin-top: 1rem; }
+#match-summary { margin: 0 0 0.5rem; font-size: 0.85rem; }
+#match-summary[data-error] { color: var(--err); }
+#unlinked-details summary { cursor: pointer; color: var(--muted); font-size: 0.82rem; }
+.unlinked {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0.4rem 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  max-height: 13rem;
+  overflow: auto;
+}
+.unlinked li { display: flex; gap: 0.8rem; padding: 0.2rem 0; font-size: 0.76rem; }
+.unlinked-name { flex-shrink: 0; }
+.unlinked-src { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-error { margin: 0.7rem 0 0; }
+#argo-connected { margin: 0.4rem 0; }
+#argo-status-text { color: var(--ok); margin: 0 0 0.6rem; font-size: 0.85rem; }
+.check-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
 #rel-commits-wrap { margin: 0.6rem 0; }
 #rel-commits-wrap summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
@@ -500,6 +562,19 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 #notes-status { font-style: normal; color: var(--lamp); }
 .release-foot { display: flex; align-items: center; gap: 1rem; margin-top: 0.4rem; }
 
+body[data-argo="off"] {
+  --ledger-cols: minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem 10rem;
+}
+body[data-argo="off"] .deploy,
+body[data-argo="off"] .ledger-head [data-sort="deployed"] { display: none; }
+
+.notice {
+  color: var(--lamp);
+  font-size: 0.82rem;
+  padding: 0.2rem 1.4rem 0;
+  margin: 0;
+}
+
 .deploy {
   font-family: var(--mono);
   font-size: 0.78rem;
@@ -508,6 +583,7 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.deploy a { color: inherit; }
 .deploy .dot { font-size: 0.9em; margin-right: 0.35em; }
 .deploy[data-state="ok"] .dot { color: var(--ok); }
 .deploy[data-state="warn"] .dot { color: var(--lamp); }

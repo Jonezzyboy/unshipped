@@ -132,7 +132,7 @@ async function loadRepos() {
     renderRepos();
   }
   $("repo-summary").textContent = "Refreshing repos…";
-  loadArgoApps();
+  loadDeployments();
 
   try {
     const repos = await invoke<Repo[]>("list_repos");
@@ -183,31 +183,50 @@ async function fetchStatuses(repos: Repo[]) {
 
 // --- Argo deployments ---
 
-interface ArgoApp { name: string; repo_urls: string[]; sync: string; health: string; revision: string | null }
-let argoAppsByRepo = new Map<string, ArgoApp[]>();
+interface ArgoApp {
+  name: string;
+  repo: string | null;
+  sync: string;
+  health: string;
+  revision: string | null;
+  url: string;
+}
+interface Deployments { configured: boolean; apps: ArgoApp[]; error: string | null }
 
-function normalizeRepoUrl(url: string): string | null {
-  const m = url.toLowerCase().match(/github\.com[:/]+([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-  return m ? `${m[1]}/${m[2]}` : null;
+let argoAppsByRepo = new Map<string, ArgoApp[]>();
+let argoConfigured = false;
+
+const ARGO_COLUMN_KEY = "unshipped:argo-column:v1";
+
+function setArgoColumn(on: boolean) {
+  document.body.dataset.argo = on ? "on" : "off";
+  localStorage.setItem(cacheKey(ARGO_COLUMN_KEY), String(on));
 }
 
-async function loadArgoApps() {
-  try {
-    const apps = await invoke<ArgoApp[]>("argo_apps");
-    argoAppsByRepo = new Map();
-    for (const app of apps) {
-      for (const url of app.repo_urls) {
-        const repoKey = normalizeRepoUrl(url);
-        if (!repoKey) continue;
-        const list = argoAppsByRepo.get(repoKey) ?? [];
-        if (!list.includes(app)) list.push(app);
-        argoAppsByRepo.set(repoKey, list);
-      }
-    }
-    scheduleRender();
-  } catch {
-    // Argo is optional; the column just stays empty.
+async function loadDeployments() {
+  const result = await invoke<Deployments>("argo_deployments").catch(
+    (e): Deployments => ({ configured: true, apps: [], error: String(e) })
+  );
+
+  argoConfigured = result.configured;
+  setArgoColumn(result.configured);
+
+  argoAppsByRepo = new Map();
+  for (const app of result.apps) {
+    if (!app.repo) continue;
+    const list = argoAppsByRepo.get(app.repo) ?? [];
+    list.push(app);
+    argoAppsByRepo.set(app.repo, list);
   }
+
+  // A configured-but-broken Argo otherwise looks exactly like a repo nothing deploys.
+  const notice = $("argo-notice");
+  notice.hidden = !result.error;
+  notice.textContent = result.error
+    ? `Argo CD: ${result.error} — the Deployed column stays empty until this is fixed. See Settings → Integrations.`
+    : "";
+
+  scheduleRender();
 }
 
 function appsFor(repo: Repo): ArgoApp[] {
@@ -494,6 +513,10 @@ function rowDeploy(repo: Repo): HTMLElement {
   const apps = appsFor(repo);
   if (!apps.length) {
     el.textContent = "—";
+    el.title = argoConfigured
+      ? `No Argo CD application points at ${repo.full_name}. Annotate the application with ` +
+        `${annotationKey}: ${repo.full_name} to link it.`
+      : "Argo CD isn’t configured.";
     return el;
   }
 
@@ -506,13 +529,19 @@ function rowDeploy(repo: Repo): HTMLElement {
 
   const worst = apps.reduce((a, b) => ((HEALTH_RANK[b.health] ?? 3) > (HEALTH_RANK[a.health] ?? 3) ? b : a));
   const outOfSync = apps.filter((a) => a.sync === "OutOfSync").length;
-  let label: string;
-  if (apps.length === 1) {
-    label = worst.health + (outOfSync ? " · OutOfSync" : "");
-  } else {
-    label = `${apps.length} apps · ${worst.health}${outOfSync ? ` · ${outOfSync} OutOfSync` : ""}`;
-  }
-  el.append(dot, document.createTextNode(label));
+  const label =
+    apps.length === 1
+      ? worst.health + (outOfSync ? " · OutOfSync" : "")
+      : `${apps.length} apps · ${worst.health}${outOfSync ? ` · ${outOfSync} OutOfSync` : ""}`;
+
+  const link = document.createElement("a");
+  link.href = "#";
+  link.append(dot, document.createTextNode(label));
+  link.onclick = (e) => {
+    e.preventDefault();
+    openUrl(worst.url);
+  };
+  el.append(link);
   el.title = apps
     .map((a) => `${a.name}: ${a.sync} / ${a.health}${a.revision ? ` @ ${a.revision}` : ""}`)
     .join("\n");
@@ -764,7 +793,27 @@ interface Settings {
   argo_iap_service_account: string;
   theme: string;
 }
-interface ArgoStatus { username: string | null; applications: number | null }
+interface Unlinked { name: string; repo_urls: string[] }
+interface AppReport {
+  total: number;
+  linked: number;
+  by_annotation: number;
+  repos: number;
+  unlinked: Unlinked[];
+  unlinked_total: number;
+  error: string | null;
+}
+interface ArgoCheck {
+  configured: boolean;
+  reachable: boolean;
+  logged_in: boolean;
+  username: string | null;
+  auth: "token" | "iap" | null;
+  error: string | null;
+  apps: AppReport | null;
+}
+
+let annotationKey = "unshipped.dev/repo";
 
 function showSettingsSection(section: string) {
   for (const btn of document.querySelectorAll<HTMLButtonElement>(".settings-nav button")) {
@@ -777,98 +826,205 @@ function showSettingsSection(section: string) {
 }
 
 function currentSettings(): Settings {
+  const iap = $<HTMLInputElement>("argo-iap").checked;
   return {
     argo_url: $<HTMLInputElement>("argo-url").value.trim(),
     argo_insecure: $<HTMLInputElement>("argo-insecure").checked,
-    argo_iap_client_id: $<HTMLInputElement>("argo-iap-client").value.trim(),
-    argo_iap_service_account: $<HTMLInputElement>("argo-iap-sa").value.trim(),
+    argo_iap_client_id: iap ? $<HTMLInputElement>("argo-iap-client").value.trim() : "",
+    argo_iap_service_account: iap ? $<HTMLInputElement>("argo-iap-sa").value.trim() : "",
     theme: currentTheme,
   };
 }
 
-function showArgoConnected(status: ArgoStatus | null) {
-  $("argo-connected").hidden = !status;
-  $("argo-auth").hidden = !!status;
-  if (status) {
-    const apps = status.applications === null ? "" : ` · ${status.applications} applications`;
-    $("argo-status-text").textContent = `Connected as ${status.username ?? "unknown"}${apps}`;
+// --- The three setup steps ---
+
+type StepState = "idle" | "ok" | "todo" | "bad";
+
+function setStep(id: string, state: StepState, note: string) {
+  const step = $(`step-${id}`);
+  step.dataset.state = state;
+  step.querySelector(".step-state")!.textContent = note;
+}
+
+// Errors belong to the step that produced them, not to a footer far below it.
+function setError(id: string, message: string | null) {
+  const el = $(id);
+  el.textContent = message ?? "";
+  el.hidden = !message;
+}
+
+function resetSteps() {
+  for (const id of ["server", "auth", "match"]) setStep(id, "idle", "");
+  for (const id of ["server-error", "auth-error", "argo-error"]) setError(id, null);
+  $("match-report").hidden = true;
+  $("argo-connected").hidden = true;
+  $("argo-auth").hidden = false;
+}
+
+function renderCheck(check: ArgoCheck) {
+  resetSteps();
+  $("auth-iap-note").hidden = !$<HTMLInputElement>("argo-iap").checked;
+
+  if (!check.configured) {
+    setStep("server", "todo", "Needs a server URL");
+    setStep("auth", "idle", "Waiting on step 1");
+    setStep("match", "idle", "Waiting on step 2");
+    return;
+  }
+
+  if (!check.reachable) {
+    setStep("server", "bad", "Can’t reach it");
+    setError("server-error", check.error);
+    setStep("auth", "idle", "Waiting on step 1");
+    setStep("match", "idle", "Waiting on step 2");
+    return;
+  }
+  setStep("server", "ok", "Reachable");
+
+  if (!check.logged_in) {
+    setStep("auth", "todo", "Not signed in");
+    setError("auth-error", check.error);
+    setStep("match", "idle", "Waiting on step 2");
+    return;
+  }
+  const via = check.auth === "iap" ? "the IAP identity" : "a stored credential";
+  $("argo-status-text").textContent = `Signed in as ${check.username ?? "unknown"} via ${via}.`;
+  $("argo-connected").hidden = false;
+  $("argo-auth").hidden = true;
+  setStep("auth", "ok", "Signed in");
+
+  renderMatchReport(check.apps);
+}
+
+function renderMatchReport(report: AppReport | null) {
+  const wrap = $("match-report");
+  wrap.hidden = !report;
+  if (!report) {
+    setStep("match", "idle", "Waiting on step 2");
+    return;
+  }
+
+  const summary = $("match-summary");
+  if (report.error) {
+    setStep("match", "bad", "Can’t list applications");
+    summary.textContent = report.error;
+    summary.dataset.error = "";
+    $("unlinked-details").hidden = true;
+    return;
+  }
+  delete summary.dataset.error;
+
+  const annotated = report.by_annotation ? ` (${report.by_annotation} by annotation)` : "";
+  summary.textContent =
+    `${report.total} application${report.total === 1 ? "" : "s"} · ` +
+    `${report.linked} linked to ${report.repos} repo${report.repos === 1 ? "" : "s"}${annotated} · ` +
+    `${report.unlinked_total} unlinked`;
+
+  if (report.total === 0) setStep("match", "todo", "No applications visible");
+  else if (report.linked === 0) setStep("match", "bad", "Nothing linked");
+  else setStep("match", report.unlinked_total ? "todo" : "ok", `${report.linked} of ${report.total} linked`);
+
+  const details = $<HTMLDetailsElement>("unlinked-details");
+  details.hidden = report.unlinked_total === 0;
+  if (!report.unlinked_total) return;
+
+  const shown = report.unlinked.length;
+  $("unlinked-summary").textContent =
+    shown < report.unlinked_total
+      ? `Unlinked applications (first ${shown} of ${report.unlinked_total})`
+      : `Unlinked applications (${report.unlinked_total})`;
+
+  const list = $("unlinked-list");
+  list.innerHTML = "";
+  for (const app of report.unlinked) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "unlinked-name mono";
+    name.textContent = app.name;
+    const from = document.createElement("span");
+    from.className = "unlinked-src mono";
+    from.textContent = app.repo_urls.length ? app.repo_urls.join(", ") : "no git source";
+    li.append(name, from);
+    list.append(li);
   }
 }
 
-function showArgoError(e: unknown) {
-  const el = $("argo-error");
-  el.textContent = String(e);
-  el.hidden = false;
+async function runCheck() {
+  const btn = $<HTMLButtonElement>("btn-argo-check");
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  try {
+    await invoke("save_settings", { new: currentSettings() });
+    renderCheck(await invoke<ArgoCheck>("argo_check"));
+  } catch (e) {
+    setError("argo-error", String(e));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Check setup";
+  }
+}
+
+async function connect(action: () => Promise<ArgoCheck>) {
+  setError("auth-error", null);
+  try {
+    await invoke("save_settings", { new: currentSettings() });
+    renderCheck(await action());
+  } catch (e) {
+    setError("auth-error", String(e));
+  }
 }
 
 async function openSettings() {
-  $("argo-error").hidden = true;
-  showArgoConnected(null);
+  resetSteps();
   showSettingsSection("appearance");
   showView("view-settings");
+
   const s = await invoke<Settings>("get_settings");
   $<HTMLInputElement>("argo-url").value = s.argo_url;
   $<HTMLInputElement>("argo-insecure").checked = s.argo_insecure;
+  $<HTMLInputElement>("argo-iap").checked = !!s.argo_iap_client_id;
   $<HTMLInputElement>("argo-iap-client").value = s.argo_iap_client_id;
   $<HTMLInputElement>("argo-iap-sa").value = s.argo_iap_service_account;
-  $<HTMLDetailsElement>("iap-details").open = !!s.argo_iap_client_id;
+  $("iap-fields").hidden = !s.argo_iap_client_id;
   renderThemeOptions();
-  try {
-    showArgoConnected(await invoke<ArgoStatus | null>("argo_status"));
-  } catch (e) {
-    showArgoError(e);
-  }
-}
 
-async function argoConnect(action: () => Promise<ArgoStatus>) {
-  $("argo-error").hidden = true;
-  try {
-    await invoke("save_settings", { new: currentSettings() });
-    showArgoConnected(await action());
-  } catch (e) {
-    showArgoError(e);
-  }
+  renderCheck(await invoke<ArgoCheck>("argo_check"));
 }
 
 $("btn-settings").onclick = () => {
   setMenu(false);
   openSettings();
 };
+$<HTMLInputElement>("argo-iap").onchange = (e) => {
+  const on = (e.target as HTMLInputElement).checked;
+  $("iap-fields").hidden = !on;
+  $("auth-iap-note").hidden = !on;
+};
+$("btn-argo-check").onclick = runCheck;
 $("btn-argo-login").onclick = () =>
-  argoConnect(() =>
-    invoke<ArgoStatus>("argo_login", {
+  connect(() =>
+    invoke<ArgoCheck>("argo_login", {
       username: $<HTMLInputElement>("argo-user").value.trim(),
       password: $<HTMLInputElement>("argo-pass").value,
     })
   );
 $("btn-argo-token").onclick = () =>
-  argoConnect(() =>
-    invoke<ArgoStatus>("argo_set_token", { token: $<HTMLInputElement>("argo-token").value })
+  connect(() =>
+    invoke<ArgoCheck>("argo_set_token", { token: $<HTMLInputElement>("argo-token").value })
   );
 $("btn-argo-disconnect").onclick = async () => {
   await invoke("argo_disconnect");
-  showArgoConnected(null);
-};
-$("btn-argo-test").onclick = async () => {
-  $("argo-error").hidden = true;
-  const btn = $<HTMLButtonElement>("btn-argo-test");
-  btn.disabled = true;
-  btn.textContent = "Testing…";
-  try {
-    await invoke("save_settings", { new: currentSettings() });
-    const status = await invoke<ArgoStatus | null>("argo_status");
-    if (status) showArgoConnected(status);
-    else showArgoError("Reachable, but not connected yet — sign in below or configure IAP.");
-  } catch (e) {
-    showArgoError(e);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Test connection";
-  }
+  await runCheck();
 };
 
+invoke<string>("argo_repo_annotation").then((key) => {
+  annotationKey = key;
+  $("annotation-snippet").textContent =
+    `metadata:\n  annotations:\n    ${key}: owner/repo`;
+});
+
 function closeSettings() {
-  invoke("save_settings", { new: currentSettings() });
+  invoke("save_settings", { new: currentSettings() }).catch(() => {}).then(loadDeployments);
   showView("view-repos");
 }
 
@@ -930,6 +1086,7 @@ invoke<Settings>("get_settings").then((s) => {
 (async () => {
   demoMode = await invoke<boolean>("is_demo").catch(() => false);
   statusCache = readCache<Record<string, CachedStatus>>(cacheKey(STATUS_KEY)) ?? {};
+  setArgoColumn(localStorage.getItem(cacheKey(ARGO_COLUMN_KEY)) === "true");
   pinnedSet = new Set(readCache<string[]>(cacheKey(PINS_KEY)) ?? []);
   checkAuth();
 })();

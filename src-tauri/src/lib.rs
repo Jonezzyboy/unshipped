@@ -34,46 +34,45 @@ fn argo_conn(app: &tauri::AppHandle) -> Result<argo::Conn, String> {
     Ok(argo::Conn { url: s.argo_url.trim().into(), insecure: s.argo_insecure, iap_token })
 }
 
+fn argo_configured(app: &tauri::AppHandle) -> bool {
+    !settings::load(app).argo_url.trim().is_empty()
+}
+
 #[tauri::command]
 async fn argo_login(
     app: tauri::AppHandle,
     username: String,
     password: String,
-) -> Result<argo::ArgoStatus, String> {
+) -> Result<argo::Check, String> {
     let conn = argo_conn(&app)?;
     let token = argo::login(&conn, &username, &password).await?;
-    let status = argo::status(&conn, Some(&token)).await?;
     store::set(ARGO_TOKEN_KEY, &token)?;
-    Ok(status)
+    Ok(argo::check(&conn, Some(&token)).await)
 }
 
 #[tauri::command]
-async fn argo_set_token(app: tauri::AppHandle, token: String) -> Result<argo::ArgoStatus, String> {
+async fn argo_set_token(app: tauri::AppHandle, token: String) -> Result<argo::Check, String> {
     let conn = argo_conn(&app)?;
-    let status = argo::status(&conn, Some(token.trim())).await?;
-    store::set(ARGO_TOKEN_KEY, token.trim())?;
-    Ok(status)
+    let token = token.trim();
+    let check = argo::check(&conn, Some(token)).await;
+    if check.logged_in {
+        store::set(ARGO_TOKEN_KEY, token)?;
+    }
+    Ok(check)
 }
 
 #[tauri::command]
-async fn argo_status(app: tauri::AppHandle) -> Result<Option<argo::ArgoStatus>, String> {
+async fn argo_check(app: tauri::AppHandle) -> argo::Check {
     if demo::enabled() {
-        return Ok(Some(argo::ArgoStatus {
-            username: Some("demo".into()),
-            applications: Some(demo::argo_apps().len() as u64),
-        }));
+        return demo::argo_check();
     }
-    let s = settings::load(&app);
-    if s.argo_url.trim().is_empty() {
-        return Ok(None);
+    if !argo_configured(&app) {
+        return argo::Check::default();
     }
-    let token = store::get(ARGO_TOKEN_KEY);
-    // With IAP in front, Argo may trust the proxy identity and need no token of its own.
-    if token.is_none() && s.argo_iap_client_id.trim().is_empty() {
-        return Ok(None);
+    match argo_conn(&app) {
+        Ok(conn) => argo::check(&conn, store::get(ARGO_TOKEN_KEY).as_deref()).await,
+        Err(e) => argo::Check { configured: true, error: Some(e), ..Default::default() },
     }
-    let conn = argo_conn(&app)?;
-    argo::status(&conn, token.as_deref()).await.map(Some)
 }
 
 #[tauri::command]
@@ -81,18 +80,37 @@ fn argo_disconnect() -> Result<(), String> {
     store::delete(ARGO_TOKEN_KEY)
 }
 
+/// The ledger needs to tell "Argo isn't set up" (hide the column) apart from
+/// "Argo is set up but answering badly" (say so) — both otherwise look like an
+/// empty Deployed column.
+#[derive(Serialize)]
+struct Deployments {
+    configured: bool,
+    apps: Vec<argo::App>,
+    error: Option<String>,
+}
+
 #[tauri::command]
-async fn argo_apps(app: tauri::AppHandle) -> Result<Vec<argo::App>, String> {
+async fn argo_deployments(app: tauri::AppHandle) -> Deployments {
     if demo::enabled() {
-        return Ok(demo::argo_apps());
+        return Deployments { configured: true, apps: demo::argo_apps(), error: None };
     }
-    let s = settings::load(&app);
-    let token = store::get(ARGO_TOKEN_KEY);
-    if s.argo_url.trim().is_empty() || (token.is_none() && s.argo_iap_client_id.trim().is_empty()) {
-        return Ok(Vec::new());
+    if !argo_configured(&app) {
+        return Deployments { configured: false, apps: Vec::new(), error: None };
     }
-    let conn = argo_conn(&app)?;
-    argo::apps(&conn, token.as_deref()).await
+    let result = match argo_conn(&app) {
+        Ok(conn) => argo::apps(&conn, store::get(ARGO_TOKEN_KEY).as_deref()).await,
+        Err(e) => Err(e),
+    };
+    match result {
+        Ok(apps) => Deployments { configured: true, apps, error: None },
+        Err(e) => Deployments { configured: true, apps: Vec::new(), error: Some(e) },
+    }
+}
+
+#[tauri::command]
+fn argo_repo_annotation() -> &'static str {
+    argo::REPO_ANNOTATION
 }
 
 #[derive(Serialize)]
@@ -294,13 +312,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             is_demo,
             auth_status,
-            argo_apps,
             get_settings,
             save_settings,
             argo_login,
             argo_set_token,
-            argo_status,
+            argo_check,
             argo_disconnect,
+            argo_deployments,
+            argo_repo_annotation,
             list_repos,
             repo_status,
             prepare_release,

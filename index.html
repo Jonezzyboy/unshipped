@@ -52,6 +52,7 @@
           <div class="chips" id="status-chips" role="group" aria-label="Filter by status"></div>
         </div>
         <p id="repo-summary" class="summary"></p>
+        <p id="argo-notice" class="notice" hidden></p>
         <div class="ledger-head" id="ledger-head" aria-hidden="false">
           <button data-sort="name">Repo</button>
           <button data-sort="waiting">Waiting</button>
@@ -84,58 +85,128 @@
 
             <section id="panel-integrations" class="settings-panel" hidden>
               <h3>Argo CD</h3>
-              <p class="hint">Connect to your Argo CD server. Used for deployment monitoring.</p>
-              <label class="field">
-                <span>Server URL</span>
-                <input id="argo-url" placeholder="https://argocd.example.com" spellcheck="false" autocomplete="off" />
-              </label>
-              <label class="check">
-                <input type="checkbox" id="argo-insecure" />
-                Allow self-signed TLS certificates
-              </label>
+              <p class="hint">
+                The <strong>Deployed</strong> column reads your Argo CD applications and shows where each
+                repo is running. Three things have to line up — this page checks each one.
+              </p>
 
-              <details id="iap-details" class="iap-block">
-                <summary>Behind Google IAP?</summary>
-                <label class="field">
-                  <span>IAP OAuth client ID</span>
-                  <input id="argo-iap-client" class="mono" placeholder="1234…apps.googleusercontent.com" spellcheck="false" autocomplete="off" />
-                </label>
-                <label class="field">
-                  <span>Service account to impersonate (optional)</span>
-                  <input id="argo-iap-sa" class="mono" placeholder="name@project.iam.gserviceaccount.com" spellcheck="false" autocomplete="off" />
-                </label>
-                <p class="hint">
-                  Identity tokens are minted with your local gcloud login and refreshed hourly.
-                  Leave the service account empty only if gcloud is signed in as one.
-                </p>
-              </details>
+              <ol class="steps">
+                <li class="step" id="step-server" data-state="idle">
+                  <div class="step-head">
+                    <span class="step-num">1</span>
+                    <h4>Reach the server</h4>
+                    <span class="step-state"></span>
+                  </div>
+                  <div class="step-body">
+                    <label class="field">
+                      <span>Server URL</span>
+                      <input id="argo-url" placeholder="https://argocd.example.com" spellcheck="false" autocomplete="off" />
+                    </label>
+                    <p class="hint">The address you open the Argo CD web UI on — not the gRPC port.</p>
+                    <label class="check">
+                      <input type="checkbox" id="argo-insecure" />
+                      Allow self-signed TLS certificates
+                    </label>
+                    <label class="check">
+                      <input type="checkbox" id="argo-iap" />
+                      Server sits behind Google IAP
+                    </label>
+                    <div id="iap-fields" class="sub-block" hidden>
+                      <label class="field">
+                        <span>IAP OAuth client ID</span>
+                        <input id="argo-iap-client" class="mono" placeholder="1234….apps.googleusercontent.com" spellcheck="false" autocomplete="off" />
+                      </label>
+                      <label class="field">
+                        <span>Service account to impersonate (optional)</span>
+                        <input id="argo-iap-sa" class="mono" placeholder="name@project.iam.gserviceaccount.com" spellcheck="false" autocomplete="off" />
+                      </label>
+                      <p class="hint">
+                        Identity tokens are minted from your local <span class="mono">gcloud</span> login and refreshed hourly,
+                        so <span class="mono">gcloud auth login</span> has to have been run on this machine.
+                        Leave the service account empty only if gcloud is already signed in as one that IAP admits.
+                      </p>
+                    </div>
+                    <p class="error step-error" id="server-error" hidden></p>
+                  </div>
+                </li>
 
-              <button type="button" id="btn-argo-test" class="ghost">Test connection</button>
+                <li class="step" id="step-auth" data-state="idle">
+                  <div class="step-head">
+                    <span class="step-num">2</span>
+                    <h4>Sign in to Argo CD</h4>
+                    <span class="step-state"></span>
+                  </div>
+                  <div class="step-body">
+                    <p class="hint" id="auth-lede">
+                      Argo CD wants an identity of its own. The credential is stored in your OS keychain,
+                      never in the settings file.
+                    </p>
+                    <p class="hint" id="auth-iap-note" hidden>
+                      IAP only gets the request through the proxy — it is not an Argo CD login.
+                    </p>
 
-              <div id="argo-connected" hidden>
-                <p id="argo-status-text" class="hint"></p>
-                <button type="button" id="btn-argo-disconnect" class="ghost">Disconnect</button>
+                    <div id="argo-connected" hidden>
+                      <p id="argo-status-text"></p>
+                      <button type="button" id="btn-argo-disconnect" class="ghost">Disconnect</button>
+                    </div>
+
+                    <div id="argo-auth">
+                      <div class="two-col">
+                        <label class="field">
+                          <span>Username</span>
+                          <input id="argo-user" spellcheck="false" autocomplete="off" />
+                        </label>
+                        <label class="field">
+                          <span>Password</span>
+                          <input id="argo-pass" type="password" autocomplete="off" />
+                        </label>
+                      </div>
+                      <button type="button" id="btn-argo-login" class="primary">Connect</button>
+                      <p class="hint or-rule">or paste an API token</p>
+                      <div class="token-row">
+                        <input id="argo-token" type="password" placeholder="Argo CD auth token" autocomplete="off" />
+                        <button type="button" id="btn-argo-token">Use token</button>
+                      </div>
+                      <p class="hint">
+                        On an SSO-only server there is no local password — make a token under
+                        <em>Settings → Accounts → your account → Generate New</em>. The account needs
+                        <span class="mono">applications, get</span> and <span class="mono">applications, list</span>.
+                      </p>
+                    </div>
+                    <p class="error step-error" id="auth-error" hidden></p>
+                  </div>
+                </li>
+
+                <li class="step" id="step-match" data-state="idle">
+                  <div class="step-head">
+                    <span class="step-num">3</span>
+                    <h4>Link applications to repos</h4>
+                    <span class="step-state"></span>
+                  </div>
+                  <div class="step-body">
+                    <p class="hint">
+                      An application lands on a repo's row when one of its sources' <span class="mono">repoURL</span>
+                      is that GitHub repo. When it isn't — a chart repo, a config mirror, a repo split across
+                      several apps — say so on the Argo side with an annotation:
+                    </p>
+                    <pre class="snippet mono"><code id="annotation-snippet"></code></pre>
+                    <p class="hint">An annotation always wins over the source URL.</p>
+
+                    <div id="match-report" hidden>
+                      <p id="match-summary"></p>
+                      <details id="unlinked-details" hidden>
+                        <summary id="unlinked-summary"></summary>
+                        <ul id="unlinked-list" class="unlinked"></ul>
+                      </details>
+                    </div>
+                  </div>
+                </li>
+              </ol>
+
+              <div class="check-row">
+                <button type="button" id="btn-argo-check" class="primary">Check setup</button>
+                <span id="argo-error" class="error" hidden></span>
               </div>
-
-              <div id="argo-auth">
-                <div class="two-col">
-                  <label class="field">
-                    <span>Username</span>
-                    <input id="argo-user" spellcheck="false" autocomplete="off" />
-                  </label>
-                  <label class="field">
-                    <span>Password</span>
-                    <input id="argo-pass" type="password" autocomplete="off" />
-                  </label>
-                </div>
-                <button type="button" id="btn-argo-login" class="primary">Connect</button>
-                <p class="hint or-rule">or paste an API token</p>
-                <div class="token-row">
-                  <input id="argo-token" type="password" placeholder="Argo CD auth token" autocomplete="off" />
-                  <button type="button" id="btn-argo-token">Use token</button>
-                </div>
-              </div>
-              <p id="argo-error" class="error" hidden></p>
             </section>
 
             <section id="panel-about" class="settings-panel" hidden>

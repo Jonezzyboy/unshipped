@@ -7,7 +7,7 @@
     "start": "tauri dev",
     "start:demo": "UNSHIPPED_DEMO=1 tauri dev",
     "bundle": "tauri build --bundles app",
-    "bundle:dmg": "APPLE_SIGNING_IDENTITY=\"${APPLE_SIGNING_IDENTITY:--}\" tauri build --bundles app,dmg",
+    "bundle:dmg": "npm run bundle && sh scripts/bundle-dmg.sh",
     "app": "npm run bundle && sh scripts/install-app.sh",
     "dev": "vite",
     "build": "tsc && vite build",
