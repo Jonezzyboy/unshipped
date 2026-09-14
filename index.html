@@ -25,7 +25,14 @@
       <section id="view-repos" class="view" hidden>
         <header class="topbar" data-tauri-drag-region>
           <h1 class="wordmark">unshipped<span class="mark-dot">.</span></h1>
-          <input id="search" placeholder="Filter repos…" spellcheck="false" />
+          <div class="search-wrap">
+            <input id="search" placeholder="Filter repos…" spellcheck="false" />
+            <button type="button" id="btn-search-clear" class="search-clear" title="Clear filter" aria-label="Clear filter" hidden>
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
           <div class="topbar-right">
             <button id="btn-refresh" class="ghost icon-btn" title="Refresh repos" aria-label="Refresh repos">
               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
