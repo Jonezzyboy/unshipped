@@ -53,11 +53,6 @@
         </div>
         <p id="repo-summary" class="summary"></p>
         <p id="argo-notice" class="notice" hidden></p>
-        <div id="train-bar" class="train-bar" hidden>
-          <span id="train-count"></span>
-          <button type="button" id="btn-train" class="primary">Release train…</button>
-          <button type="button" id="btn-train-clear" class="ghost">Clear</button>
-        </div>
         <div class="ledger-head" id="ledger-head" aria-hidden="false">
           <span></span>
           <button data-sort="name">Repo</button>
@@ -68,6 +63,12 @@
           <span></span>
         </div>
         <ul id="repo-list" class="ledger"></ul>
+        <div id="train-bar" class="train-bar" hidden>
+          <span id="train-count"></span>
+          <span class="train-divider" aria-hidden="true"></span>
+          <button type="button" id="btn-train" class="primary">Release train…</button>
+          <button type="button" id="btn-train-clear" class="ghost">Clear</button>
+        </div>
       </section>
 
       <!-- Settings -->

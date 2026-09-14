@@ -784,6 +784,7 @@ function renderTrainBar() {
     if (status && status.ahead_by <= 0) selected.delete(name);
   }
   $("train-bar").hidden = selected.size === 0;
+  document.body.dataset.selecting = selected.size ? "on" : "off";
   $("train-count").textContent = `${selected.size} selected`;
 }
 
