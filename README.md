@@ -19,28 +19,51 @@ npm start
 
 `npm start` runs the app from source with hot reload.
 
-## Install as an app
+## Install
 
 ```sh
-npm run app
+brew install --cask Jonezzyboy/unshipped/unshipped
 ```
 
-Builds a release bundle, copies `unshipped.app` into `/Applications`, and opens it. After that it launches like any other Mac app — no terminal needed.
+Apple Silicon only. `gh` comes along as a cask dependency, but you still need to be
+signed in (`gh auth login`) — the app has no login of its own.
 
+The build is ad-hoc signed rather than notarised with an Apple Developer ID, so
+Gatekeeper would block the first launch. The cask clears the quarantine attribute in
+`postflight_steps` so the install just works. That trades away Gatekeeper's check on
+this app — the honest fix is a paid Apple Developer account: set
+`bundle.macOS.signingIdentity` in `src-tauri/tauri.conf.json`, add `APPLE_ID` /
+`APPLE_PASSWORD` / `APPLE_TEAM_ID` to the release workflow, then drop the
+`postflight_steps` block from `packaging/cask.rb.tmpl`.
+
+`brew upgrade --cask unshipped` picks up new versions as they are released.
+
+### From source
+
+- `npm run app` — build a release bundle, copy it into `/Applications`, and open it.
 - `npm run bundle` — build the `.app` only (`src-tauri/target/release/bundle/macos/`).
-- `npm run bundle:dmg` — also produce a `.dmg` for sharing.
+- `npm run bundle:dmg` — also produce a `.dmg`.
 
-The bundle is unsigned (ad-hoc, Apple Silicon only), so it runs on this machine but is not distributable as-is — see below.
+## Releasing
 
-## Distribution
+A published GitHub release is the single trigger: `.github/workflows/release.yml` builds
+the DMG, attaches it to that release, and rewrites the cask in
+[Jonezzyboy/homebrew-unshipped](https://github.com/Jonezzyboy/homebrew-unshipped) with the
+new version and checksum. What is tagged on GitHub is what `brew` serves.
 
-Sending the `.dmg` to someone else needs, in order of increasing effort:
+```sh
+scripts/set-version.sh 0.2.0
+git commit -am "Release 0.2.0" && git push
+```
 
-1. **`codesign --force --deep -s - unshipped.app`** — repairs the bundle seal. Without it macOS calls the app "damaged" and refuses to open it at all. With it, the recipient gets the normal "unidentified developer" block, clearable via right-click → Open.
-2. **Developer ID signature + notarisation** — required for it to just open. Needs a paid Apple Developer account; set `bundle.macOS.signingIdentity` in `src-tauri/tauri.conf.json` plus `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` for `tauri build`.
-3. **Universal binary** — the current build is `arm64` only. `tauri build --target universal-apple-darwin` covers Intel Macs.
+Then cut the release — from unshipped itself, or `gh release create v0.2.0 --generate-notes`.
 
-Recipients also need `gh` installed and signed in; the app has no login of its own.
+`set-version.sh` exists because the version lives in three manifests (`package.json`,
+`src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`); the workflow refuses to build when
+they disagree with the tag, rather than shipping a DMG whose name and contents mismatch.
+
+The workflow needs a `TAP_TOKEN` repo secret — a PAT with write access to the tap repo,
+since the default workflow token cannot push across repositories.
 
 ### Demo mode
 
