@@ -14,6 +14,8 @@ pub struct Settings {
     pub argo_iap_service_account: String,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default)]
+    pub menu_bar: bool,
 }
 
 fn default_theme() -> String {
@@ -28,6 +30,7 @@ impl Default for Settings {
             argo_iap_client_id: String::new(),
             argo_iap_service_account: String::new(),
             theme: default_theme(),
+            menu_bar: false,
         }
     }
 }
