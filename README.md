@@ -57,6 +57,8 @@ git commit -am "Release 0.2.0" && git push
 ```
 
 Then cut the release — from unshipped itself, or `gh release create v0.2.0 --generate-notes`.
+The tag has to read `v<version>`: the workflow takes the version from it by dropping the leading
+`v`, and rejects a tag it cannot parse before building anything.
 
 `set-version.sh` exists because the version lives in three manifests (`package.json`,
 `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`); the workflow refuses to build when
