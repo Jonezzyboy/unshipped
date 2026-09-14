@@ -1,0 +1,11 @@
+- dialog [ref=e1]:
+  - list [ref=e2]:
+    - listitem [ref=e21]:
+      - button "Reorder infra-cluster" [ref=e22]: ⠿
+      - generic [ref=e23]: infra-cluster
+    - listitem [ref=e24]:
+      - button "Reorder flock-game" [ref=e25]: ⠿
+      - generic [ref=e26]: flock-game
+    - listitem [ref=e27]:
+      - button "Reorder monolith" [ref=e28]: ⠿
+      - generic [ref=e29]: monolith

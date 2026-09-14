@@ -834,7 +834,6 @@ const LEVELS: BumpLevel[] = ["major", "minor", "patch"];
 let train: TrainEntry[] = [];
 let trainRunning = false;
 let trainFinished = false;
-let dragFrom: number | null = null;
 
 const trainLocked = () => trainRunning || trainFinished;
 
@@ -884,6 +883,49 @@ async function openTrain() {
   renderTrain();
 }
 
+/// Pointer events rather than HTML5 drag and drop: WebKit will not start a drag
+/// from a form control, so the grab handle never began one.
+function dragRow(index: number, down: PointerEvent) {
+  if (trainLocked()) return;
+  down.preventDefault();
+
+  const rows = [...$("train-rows").children] as HTMLElement[];
+  const held = rows[index];
+  if (!held) return;
+  held.dataset.dragging = "true";
+  let target = index;
+
+  const mark = (over: HTMLElement | null) => {
+    for (const row of rows) delete row.dataset.drop;
+    if (over) over.dataset.drop = "true";
+  };
+
+  const onMove = (e: PointerEvent) => {
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const over = under instanceof Element ? under.closest<HTMLElement>(".train-row") : null;
+    if (!over || over === held) {
+      target = index;
+      mark(null);
+      return;
+    }
+    target = rows.indexOf(over);
+    mark(over);
+  };
+
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    delete held.dataset.dragging;
+    mark(null);
+    if (target !== index) moveTrainEntry(index, target);
+  };
+
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+}
+
 function moveTrainEntry(from: number, to: number): boolean {
   if (trainLocked() || to < 0 || to >= train.length || from === to) return false;
   const [entry] = train.splice(from, 1);
@@ -897,7 +939,6 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
   li.className = "train-row";
   li.dataset.state = entry.state;
   li.dataset.include = String(entry.include);
-  li.draggable = !trainLocked();
 
   const grip = document.createElement("button");
   grip.type = "button";
@@ -912,29 +953,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
     if (!moveTrainEntry(index, to)) return;
     $("train-rows").children[to]?.querySelector<HTMLButtonElement>(".grip")?.focus();
   };
-
-  li.ondragstart = (e) => {
-    dragFrom = index;
-    li.dataset.dragging = "true";
-    e.dataTransfer?.setData("text/plain", entry.repo.full_name);
-  };
-  li.ondragend = () => {
-    dragFrom = null;
-    delete li.dataset.dragging;
-    delete li.dataset.drop;
-  };
-  li.ondragover = (e) => {
-    if (dragFrom === null || dragFrom === index) return;
-    e.preventDefault();
-    li.dataset.drop = "true";
-  };
-  li.ondragleave = () => delete li.dataset.drop;
-  li.ondrop = (e) => {
-    e.preventDefault();
-    delete li.dataset.drop;
-    if (dragFrom !== null) moveTrainEntry(dragFrom, index);
-    dragFrom = null;
-  };
+  grip.onpointerdown = (e) => dragRow(index, e);
 
   const tick = document.createElement("button");
   tick.type = "button";
@@ -1109,7 +1128,6 @@ $<HTMLDialogElement>("train-dialog").addEventListener("close", () => {
   train = [];
   trainRunning = false;
   trainFinished = false;
-  dragFrom = null;
 });
 
 // --- Menu bar ---
