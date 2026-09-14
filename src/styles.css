@@ -204,8 +204,10 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: 1rem;
   /* Left inset clears the traffic lights, which float over the header.
-     55px less the border puts the content line on 27px — where macOS centres
-     the lights — so the two agree instead of missing by 3.4px. */
+     55px less the border puts the content line on 27px. The lights are placed
+     by trafficLightPosition in tauri.conf.json, and that number is NOT the
+     button's top edge — measured against real pixels, y 29.25 lands their
+     centre on this same 27px. Move one and the other needs re-measuring. */
   min-height: 55px;
   padding: 0 1.4rem 0 80px;
   border-bottom: 1px solid var(--line);
