@@ -83,6 +83,23 @@ since the default workflow token cannot push across repositories.
   suggested bump and generated notes, the order is yours to set (drag a row, or focus its handle and
   use the arrow keys), and the run stops at the first failure rather than half-tagging the rest.
 
+## Icon
+
+The mark is drawn in code, not stored as artwork: `scripts/icon.swift` renders it with
+CoreGraphics so it can be regenerated at any size.
+
+```sh
+swiftc -O scripts/icon.swift -o /tmp/mkicon
+/tmp/mkicon app 1024 src-tauri/icons/source-1024.png   # the app icon, on its tile
+/tmp/mkicon tray 44 src-tauri/icons/tray.png           # menu bar, black + alpha
+npm run tauri -- icon src-tauri/icons/source-1024.png  # the rest of the set
+```
+
+The menu bar copy is a template image: macOS tints it to match the bar, so it must be one
+flat colour plus alpha. The same shape is used everywhere — a ring left open at the
+top-left with the lamp dot in the gap. The dot stays out of the centre because a dot inside
+a ring is the screen-recording indicator.
+
 ## Settings
 
 ⚙ Settings → **Appearance** picks the theme. ⚙ Settings → **Menu bar** puts the waiting count in the

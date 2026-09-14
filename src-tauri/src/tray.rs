@@ -4,6 +4,9 @@ use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, Manager, Wry};
 
 const TRAY_ID: &str = "menu-bar";
+/// Flat black plus alpha: macOS tints a template image to match the menu bar,
+/// which the app icon's own colours cannot do.
+const TRAY_ICON: &[u8] = include_bytes!("../icons/tray.png");
 const REPO_PREFIX: &str = "repo:";
 
 #[derive(Deserialize)]
@@ -35,8 +38,17 @@ pub fn apply(
         .title(title)
         .tooltip("unshipped")
         .on_menu_event(on_menu_event);
-    if let Some(icon) = app.default_window_icon().cloned() {
-        builder = builder.icon(icon);
+    match tauri::image::Image::from_bytes(TRAY_ICON) {
+        Ok(icon) => builder = builder.icon(icon),
+        Err(_) => {
+            if let Some(icon) = app.default_window_icon().cloned() {
+                builder = builder.icon(icon);
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.icon_as_template(true);
     }
     builder.build(app).map(|_| ()).map_err(|e| e.to_string())
 }
