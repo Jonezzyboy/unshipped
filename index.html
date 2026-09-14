@@ -100,17 +100,22 @@
 
             <section id="panel-menubar" class="settings-panel" hidden>
               <h3>Menu bar</h3>
-              <p class="hint">
-                How much is waiting, and the repos ready to cut, without the window open.
-              </p>
-              <label class="check">
+              <p class="hint">Keep an eye on what is waiting without the window open.</p>
+
+              <label class="check setting">
                 <input type="checkbox" id="menu-bar-toggle" />
                 Show unshipped in the menu bar
               </label>
-              <p class="hint">
-                While this is on, closing the window leaves the app running in the menu bar — quit it from
-                there. The list refreshes every 15 minutes, and picking a repo opens its release dialog.
+              <p class="hint setting-note">
+                A count of the repos with commits waiting, and the ready list one click away.
               </p>
+
+              <div class="facts-head">While it is on</div>
+              <ul class="facts">
+                <li>Closing the window leaves the app running — quit it from the menu bar.</li>
+                <li>The list refreshes itself every 15 minutes.</li>
+                <li>Picking a repo opens its release dialog.</li>
+              </ul>
             </section>
 
             <section id="panel-integrations" class="settings-panel" hidden>

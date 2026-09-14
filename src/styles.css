@@ -488,6 +488,30 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 
 .check { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0; }
 .check input { width: auto; }
+
+/* A panel's own setting should not read quieter than the prose describing it. */
+.check.setting {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 550;
+  gap: 0.6rem;
+  margin: 1rem 0 0.2rem;
+}
+.setting-note { margin: 0 0 1.3rem; padding-left: 1.25rem; }
+.facts-head {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+.facts { list-style: none; margin: 0; padding: 0; }
+.facts li {
+  border-top: 1px solid var(--line);
+  padding: 0.45rem 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
 .or-rule { margin: 1rem 0 0.4rem; }
 .token-row { display: flex; gap: 0.6rem; }
