@@ -317,6 +317,7 @@ a:hover { text-decoration: underline; }
 .repo-row:hover { background: var(--surface); }
 .repo-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .repo-name .owner { color: var(--muted); font-weight: 400; }
+.repo-name a { color: inherit; }
 .repo-tag, .repo-age { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); }
 .repo-tag a { color: inherit; }
 .repo-row .actions {
