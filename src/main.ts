@@ -477,8 +477,15 @@ function rowName(repo: Repo): HTMLElement {
   const owner = document.createElement("span");
   owner.className = "owner";
   owner.textContent = `${repo.owner.login} / `;
-  el.append(owner, document.createTextNode(repo.name));
-  el.title = repo.full_name;
+  const link = document.createElement("a");
+  link.href = "#";
+  link.title = `Open ${repo.full_name} on GitHub`;
+  link.append(owner, document.createTextNode(repo.name));
+  link.onclick = (e) => {
+    e.preventDefault();
+    openUrl(repo.html_url);
+  };
+  el.append(link);
   return el;
 }
 
