@@ -203,8 +203,13 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 1rem;
-  /* Left inset clears the traffic lights, which float over the header. */
-  padding: 0.9rem 1.4rem 0.9rem 80px;
+  /* Left inset clears the traffic lights, which float over the header.
+     55px less the border puts the content line on 27px. The lights are placed
+     by trafficLightPosition in tauri.conf.json, and that number is NOT the
+     button's top edge — measured against real pixels, y 29.25 lands their
+     centre on this same 27px. Move one and the other needs re-measuring. */
+  min-height: 55px;
+  padding: 0 1.4rem 0 80px;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
@@ -658,6 +663,8 @@ body[data-argo="off"] .ledger-head [data-sort="deployed"] { display: none; }
 .deploy[data-state="bad"] .dot { color: var(--err); }
 
 @media (max-width: 640px) {
+  /* Wrapped rows need the padding the fixed height would otherwise supply. */
+  .topbar { padding-top: 0.6rem; padding-bottom: 0.6rem; }
   .repo-row, .ledger-head { grid-template-columns: 1.1rem 1fr auto auto; }
   .repo-tag, .repo-age, .deploy,
   .ledger-head [data-sort="tag"], .ledger-head [data-sort="released"],
