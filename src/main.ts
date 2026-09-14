@@ -421,6 +421,7 @@ function buildRow(repo: Repo): HTMLElement {
   const li = document.createElement("li");
   li.className = "repo-row";
   li.append(
+    rowSelect(repo),
     rowName(repo),
     rowLamp(repo),
     rowTag(repo),
@@ -440,6 +441,7 @@ function sectionLabel(text: string): HTMLElement {
 
 function renderRepos() {
   renderFilters();
+  renderTrainBar();
   sentinelObserver.disconnect();
   const list = $("repo-list");
   list.innerHTML = "";
@@ -721,7 +723,74 @@ $("btn-create-release").onclick = async () => {
       body: $<HTMLTextAreaElement>("rel-notes").value,
     });
     showReleaseSuccess(repo, tag, url);
-    // Refresh this repo's row — it just shipped.
+    await refreshStatus(repo);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = "Create release";
+    showRelError(e);
+  }
+};
+
+
+// --- Selection: the rows a release train runs over ---
+
+const TICK_SVG =
+  '<svg aria-hidden="true" width="10" height="10" viewBox="0 0 16 16" fill="none">' +
+  '<path d="M3.5 8.5l3 3 6-7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const GRIP_SVG =
+  '<svg aria-hidden="true" width="10" height="14" viewBox="0 0 10 16" fill="currentColor">' +
+  '<circle cx="3" cy="4" r="1.1"/><circle cx="7" cy="4" r="1.1"/>' +
+  '<circle cx="3" cy="8" r="1.1"/><circle cx="7" cy="8" r="1.1"/>' +
+  '<circle cx="3" cy="12" r="1.1"/><circle cx="7" cy="12" r="1.1"/></svg>';
+
+const selected = new Set<string>();
+
+function rowSelect(repo: Repo): HTMLElement {
+  const status = statuses.get(repo.full_name);
+  if (!status || status.ahead_by <= 0) return document.createElement("span");
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "tick-box";
+  btn.innerHTML = TICK_SVG;
+  const on = selected.has(repo.full_name);
+  btn.setAttribute("aria-pressed", String(on));
+  btn.title = on ? "Take out of the release train" : "Add to a release train";
+  btn.onclick = () => {
+    if (on) selected.delete(repo.full_name);
+    else selected.add(repo.full_name);
+    renderRepos();
+  };
+  return btn;
+}
+
+function renderTrainBar() {
+  // A repo that shipped in the meantime has nothing left to release.
+  for (const name of [...selected]) {
+    const status = statuses.get(name);
+    if (status && status.ahead_by <= 0) selected.delete(name);
+  }
+  $("train-bar").hidden = selected.size === 0;
+  $("train-count").textContent = `${selected.size} selected`;
+}
+
+/// Ledger order, then anything a filter is currently hiding — a selection made
+/// before filtering must not silently drop out of the train.
+function trainRepos(): Repo[] {
+  const ordered = [...pinnedRepos(), ...sortedRepos(), ...allRepos];
+  const seen = new Set<string>();
+  const out: Repo[] = [];
+  for (const repo of ordered) {
+    if (!selected.has(repo.full_name) || seen.has(repo.full_name)) continue;
+    seen.add(repo.full_name);
+    out.push(repo);
+  }
+  return out;
+}
+
+async function refreshStatus(repo: Repo) {
+  try {
     const status = await invoke<RepoStatus>("repo_status", {
       owner: repo.owner.login,
       repo: repo.name,
@@ -729,12 +798,306 @@ $("btn-create-release").onclick = async () => {
     });
     cacheStatus(repo, status);
     scheduleRender();
-  } catch (e) {
-    btn.disabled = false;
-    btn.textContent = "Create release";
-    showRelError(e);
+  } catch {
+    // The row stays as it was until the next refresh.
   }
+}
+
+// --- Release train ---
+
+type TrainState = "queued" | "running" | "done" | "failed" | "skipped";
+
+interface TrainEntry {
+  repo: Repo;
+  prep: ReleasePrep | null;
+  level: BumpLevel;
+  include: boolean;
+  state: TrainState;
+  note: string;
+  url: string | null;
+}
+
+const LEVELS: BumpLevel[] = ["major", "minor", "patch"];
+let train: TrainEntry[] = [];
+let trainRunning = false;
+let trainFinished = false;
+let dragFrom: number | null = null;
+
+const trainLocked = () => trainRunning || trainFinished;
+
+async function openTrain() {
+  const repos = trainRepos();
+  if (!repos.length) return;
+
+  train = repos.map((repo) => ({
+    repo,
+    prep: null,
+    level: "patch",
+    include: true,
+    state: "queued",
+    note: "queued",
+    url: null,
+  }));
+  trainRunning = false;
+  trainFinished = false;
+
+  $("train-lede").textContent =
+    `${repos.length} repo${repos.length === 1 ? "" : "s"}, one tag each with generated notes, cut in the order below.`;
+  $("train-loading").hidden = false;
+  $("train-body").hidden = true;
+  $("train-error").hidden = true;
+  $("train-foot-hint").textContent = "Stops on the first failure — nothing after it is tagged.";
+  $<HTMLDialogElement>("train-dialog").showModal();
+
+  await Promise.all(
+    train.map(async (entry) => {
+      try {
+        entry.prep = await invoke<ReleasePrep>("prepare_release", {
+          owner: entry.repo.owner.login,
+          repo: entry.repo.name,
+          defaultBranch: entry.repo.default_branch,
+        });
+        entry.level = entry.prep.suggestion.level;
+      } catch (e) {
+        entry.include = false;
+        entry.state = "skipped";
+        entry.note = String(e);
+      }
+    })
+  );
+
+  $("train-loading").hidden = true;
+  $("train-body").hidden = false;
+  renderTrain();
+}
+
+function moveTrainEntry(from: number, to: number): boolean {
+  if (trainLocked() || to < 0 || to >= train.length || from === to) return false;
+  const [entry] = train.splice(from, 1);
+  train.splice(to, 0, entry);
+  renderTrain();
+  return true;
+}
+
+function trainRow(entry: TrainEntry, index: number): HTMLElement {
+  const li = document.createElement("li");
+  li.className = "train-row";
+  li.dataset.state = entry.state;
+  li.dataset.include = String(entry.include);
+  li.draggable = !trainLocked();
+
+  const grip = document.createElement("button");
+  grip.type = "button";
+  grip.className = "grip";
+  grip.innerHTML = GRIP_SVG;
+  grip.title = "Drag, or use the up and down arrows, to reorder";
+  grip.setAttribute("aria-label", `Reorder ${entry.repo.full_name}`);
+  grip.onkeydown = (e) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    const to = index + (e.key === "ArrowUp" ? -1 : 1);
+    if (!moveTrainEntry(index, to)) return;
+    $("train-rows").children[to]?.querySelector<HTMLButtonElement>(".grip")?.focus();
+  };
+
+  li.ondragstart = (e) => {
+    dragFrom = index;
+    li.dataset.dragging = "true";
+    e.dataTransfer?.setData("text/plain", entry.repo.full_name);
+  };
+  li.ondragend = () => {
+    dragFrom = null;
+    delete li.dataset.dragging;
+    delete li.dataset.drop;
+  };
+  li.ondragover = (e) => {
+    if (dragFrom === null || dragFrom === index) return;
+    e.preventDefault();
+    li.dataset.drop = "true";
+  };
+  li.ondragleave = () => delete li.dataset.drop;
+  li.ondrop = (e) => {
+    e.preventDefault();
+    delete li.dataset.drop;
+    if (dragFrom !== null) moveTrainEntry(dragFrom, index);
+    dragFrom = null;
+  };
+
+  const tick = document.createElement("button");
+  tick.type = "button";
+  tick.className = "tick-box";
+  tick.innerHTML = TICK_SVG;
+  tick.setAttribute("aria-pressed", String(entry.include));
+  tick.disabled = trainLocked() || !entry.prep;
+  tick.title = entry.include ? "Leave this repo out" : "Put this repo back in";
+  tick.onclick = () => {
+    entry.include = !entry.include;
+    renderTrain();
+  };
+
+  const name = document.createElement("span");
+  name.className = "repo";
+  const owner = document.createElement("span");
+  owner.className = "owner";
+  owner.textContent = `${entry.repo.owner.login} / `;
+  name.append(owner, document.createTextNode(entry.repo.name));
+
+  const segs = document.createElement("span");
+  segs.className = "segs";
+  for (const level of LEVELS) {
+    const seg = document.createElement("button");
+    seg.type = "button";
+    seg.className = "seg";
+    seg.textContent = level;
+    seg.setAttribute("role", "radio");
+    seg.setAttribute("aria-checked", String(entry.level === level));
+    seg.disabled = trainLocked() || !entry.prep;
+    seg.onclick = () => {
+      entry.level = level;
+      renderTrain();
+    };
+    segs.append(seg);
+  }
+
+  const next = document.createElement("span");
+  next.className = "next";
+  if (entry.prep) {
+    const from = document.createElement("span");
+    from.className = "from";
+    from.textContent = entry.prep.current_tag ? `${entry.prep.current_tag} → ` : "first → ";
+    next.append(from, document.createTextNode(entry.prep.suggestion[entry.level]));
+  } else {
+    next.textContent = "—";
+  }
+
+  const state = document.createElement("span");
+  state.className = "state";
+  state.title = entry.note;
+  if (entry.state === "done" && entry.url) {
+    const link = document.createElement("a");
+    link.href = "#";
+    link.textContent = entry.note;
+    link.onclick = (e) => {
+      e.preventDefault();
+      openUrl(entry.url!);
+    };
+    state.append(link);
+  } else {
+    state.textContent = entry.note;
+  }
+
+  li.append(grip, tick, name, segs, next, state);
+  return li;
+}
+
+function renderTrain() {
+  const list = $("train-rows");
+  list.innerHTML = "";
+  train.forEach((entry, index) => list.append(trainRow(entry, index)));
+
+  const runnable = train.filter((e) => e.include && e.prep).length;
+  const run = $<HTMLButtonElement>("btn-train-run");
+  if (trainFinished) {
+    run.disabled = true;
+  } else if (trainRunning) {
+    run.disabled = true;
+    run.textContent = "Releasing…";
+  } else {
+    run.disabled = runnable === 0;
+    run.textContent = `Create ${runnable} release${runnable === 1 ? "" : "s"}`;
+  }
+  // Closing mid-train would hide a run that is still tagging repos.
+  $("train-dialog").querySelector<HTMLButtonElement>(".release-head button")!.disabled = trainRunning;
+}
+
+function showTrainError(message: string) {
+  const el = $("train-error");
+  el.textContent = message;
+  el.hidden = false;
+}
+
+async function runTrain() {
+  trainRunning = true;
+  $("train-error").hidden = true;
+  renderTrain();
+
+  let released = 0;
+  let stopped = false;
+
+  for (const entry of train) {
+    if (!entry.include || !entry.prep) continue;
+    if (stopped) {
+      entry.state = "skipped";
+      entry.note = "not tagged";
+      continue;
+    }
+
+    const { repo, prep } = entry;
+    const tag = prep.suggestion[entry.level];
+    entry.state = "running";
+    entry.note = "releasing…";
+    renderTrain();
+
+    try {
+      const notes = await invoke<Notes>("generate_notes", {
+        owner: repo.owner.login,
+        repo: repo.name,
+        tagName: tag,
+        defaultBranch: repo.default_branch,
+        previousTag: prep.current_tag,
+      });
+      entry.url = await invoke<string>("create_release", {
+        owner: repo.owner.login,
+        repo: repo.name,
+        tagName: tag,
+        defaultBranch: repo.default_branch,
+        name: notes.name || tag,
+        body: notes.body,
+      });
+      entry.state = "done";
+      entry.note = tag;
+      released += 1;
+      selected.delete(repo.full_name);
+      refreshStatus(repo);
+    } catch (e) {
+      entry.state = "failed";
+      entry.note = "failed";
+      stopped = true;
+      showTrainError(`${repo.full_name}: ${String(e)}`);
+    }
+    renderTrain();
+  }
+
+  trainRunning = false;
+  trainFinished = true;
+  const run = $<HTMLButtonElement>("btn-train-run");
+  run.textContent = released
+    ? `${released} release${released === 1 ? "" : "s"} created`
+    : "Nothing released";
+  $("train-foot-hint").textContent = stopped
+    ? "The rest were left alone — fix the failure and run another train."
+    : "Close to go back to the ledger.";
+  renderTrain();
+  renderRepos();
+  summarize();
+  saveStatusCache();
+}
+
+$("btn-train").onclick = openTrain;
+$("btn-train-clear").onclick = () => {
+  selected.clear();
+  renderRepos();
 };
+$("btn-train-run").onclick = runTrain;
+$<HTMLDialogElement>("train-dialog").addEventListener("cancel", (e) => {
+  if (trainRunning) e.preventDefault();
+});
+$<HTMLDialogElement>("train-dialog").addEventListener("close", () => {
+  train = [];
+  trainRunning = false;
+  trainFinished = false;
+  dragFrom = null;
+});
 
 // --- Themes ---
 
