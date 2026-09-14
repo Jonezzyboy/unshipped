@@ -895,9 +895,11 @@ function dragRow(index: number, down: PointerEvent) {
   held.dataset.dragging = "true";
   let target = index;
 
-  const mark = (over: HTMLElement | null) => {
+  // The line goes on the edge the row will land against, so dragging onto the
+  // last row marks its bottom rather than the gap the held row already sits in.
+  const mark = (over: HTMLElement | null, below = false) => {
     for (const row of rows) delete row.dataset.drop;
-    if (over) over.dataset.drop = "true";
+    if (over) over.dataset.drop = below ? "below" : "above";
   };
 
   const onMove = (e: PointerEvent) => {
@@ -909,7 +911,7 @@ function dragRow(index: number, down: PointerEvent) {
       return;
     }
     target = rows.indexOf(over);
-    mark(over);
+    mark(over, target > index);
   };
 
   const onUp = () => {
