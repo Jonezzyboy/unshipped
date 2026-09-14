@@ -96,9 +96,9 @@ npm run tauri -- icon src-tauri/icons/source-1024.png  # the rest of the set
 ```
 
 The menu bar copy is a template image: macOS tints it to match the bar, so it must be one
-flat colour plus alpha. The same shape is used everywhere — a ring left open at the
-top-left with the lamp dot in the gap. The dot stays out of the centre because a dot inside
-a ring is the screen-recording indicator.
+flat colour plus alpha. The same shape is used everywhere — a paper boat, a hull and a sail
+folded out of two shapes. It is two solid forms with a gap between them, which is what lets
+it survive being flattened to a single colour at 16px.
 
 ## Settings
 

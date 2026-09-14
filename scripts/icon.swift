@@ -4,28 +4,27 @@ import ImageIO
 import UniformTypeIdentifiers
 
 // Renders the unshipped mark: a ring left open at the top-left, with the lamp dot inside.
-// The mark: a ring left open at the top-left, with the lamp dot sitting in the gap.
-// The dot stays out of the centre — a dot inside a ring is the screen-recording indicator.
+// The mark: a paper boat — a hull and a sail, folded out of two shapes.
+// Kept to two solid forms with a gap between them so it survives being
+// flattened to one colour at menu bar size.
 func drawMark(_ ctx: CGContext, box: CGRect, ring: CGColor, dot: CGColor) {
-    let m = box.width
-    let cx = box.midX, cy = box.midY
-    let r = 23.0 / 64.0 * m
-    let w = 7.0 / 64.0 * m
+    let s = box.width, x0 = box.minX, y0 = box.minY
+    func p(_ x: Double, _ y: Double) -> CGPoint {
+        CGPoint(x: x0 + CGFloat(x / 64.0) * s, y: y0 + s - CGFloat(y / 64.0) * s)
+    }
 
-    ctx.setStrokeColor(ring)
-    ctx.setLineWidth(w)
-    ctx.setLineCap(.round)
-    ctx.beginPath()
-    ctx.addArc(center: CGPoint(x: cx, y: cy), radius: r,
-               startAngle: .pi / 2, endAngle: .pi / 2 - (300.0 * .pi / 180.0),
-               clockwise: true)
-    ctx.strokePath()
-
-    let a = 127.5 * Double.pi / 180.0
-    let d = 5.6 / 64.0 * m
     ctx.setFillColor(dot)
-    ctx.fillEllipse(in: CGRect(x: cx + CGFloat(cos(a)) * r - d, y: cy + CGFloat(sin(a)) * r - d,
-                               width: d * 2, height: d * 2))
+    let sail = CGMutablePath()
+    sail.move(to: p(33, 4)); sail.addLine(to: p(33, 34)); sail.addLine(to: p(54, 34))
+    sail.closeSubpath()
+    ctx.addPath(sail); ctx.fillPath()
+
+    ctx.setFillColor(ring)
+    let hull = CGMutablePath()
+    hull.move(to: p(6, 38)); hull.addLine(to: p(58, 38))
+    hull.addLine(to: p(46, 56)); hull.addLine(to: p(18, 56))
+    hull.closeSubpath()
+    ctx.addPath(hull); ctx.fillPath()
 }
 
 func write(_ ctx: CGContext, _ path: String) {
