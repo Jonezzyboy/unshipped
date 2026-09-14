@@ -53,7 +53,13 @@
         </div>
         <p id="repo-summary" class="summary"></p>
         <p id="argo-notice" class="notice" hidden></p>
+        <div id="train-bar" class="train-bar" hidden>
+          <span id="train-count"></span>
+          <button type="button" id="btn-train" class="primary">Release train…</button>
+          <button type="button" id="btn-train-clear" class="ghost">Clear</button>
+        </div>
         <div class="ledger-head" id="ledger-head" aria-hidden="false">
+          <span></span>
           <button data-sort="name">Repo</button>
           <button data-sort="waiting">Waiting</button>
           <button data-sort="tag">Release</button>
@@ -217,6 +223,27 @@
         </div>
       </section>
     </div>
+
+    <!-- Release train -->
+    <dialog id="train-dialog">
+      <form method="dialog" class="release">
+        <header class="release-head">
+          <h2>Release train</h2>
+          <button value="close" class="ghost" type="submit">Close</button>
+        </header>
+        <p id="train-lede" class="hint"></p>
+        <div id="train-loading" class="hint">Reading commits since the last release…</div>
+        <div id="train-body" hidden>
+          <ul id="train-rows" class="train-rows"></ul>
+          <p class="hint">Drag a row to change the order — a repo the others depend on goes first.</p>
+          <p id="train-error" class="error" hidden></p>
+          <footer class="release-foot">
+            <button id="btn-train-run" class="primary" type="button">Create releases</button>
+            <span id="train-foot-hint" class="hint">Stops on the first failure — nothing after it is tagged.</span>
+          </footer>
+        </div>
+      </form>
+    </dialog>
 
     <!-- Release dialog -->
     <dialog id="release-dialog">
