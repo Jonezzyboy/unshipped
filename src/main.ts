@@ -1498,7 +1498,20 @@ document.addEventListener("keydown", (e) => {
 });
 
 $("btn-refresh").onclick = loadRepos;
-$("search").oninput = resetAndRender;
+function syncSearchClear() {
+  $("btn-search-clear").hidden = $<HTMLInputElement>("search").value.length === 0;
+}
+$("search").oninput = () => {
+  syncSearchClear();
+  resetAndRender();
+};
+$("btn-search-clear").onclick = () => {
+  const input = $<HTMLInputElement>("search");
+  input.value = "";
+  syncSearchClear();
+  resetAndRender();
+  input.focus();
+};
 $("btn-retry").onclick = checkAuth;
 for (const btn of document.querySelectorAll<HTMLButtonElement>("#ledger-head button")) {
   btn.onclick = () => {
