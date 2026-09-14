@@ -269,14 +269,18 @@ a:hover { text-decoration: underline; }
   border-radius: 5px;
 }
 .dropdown button:hover { background: var(--surface); }
-.summary { color: var(--muted); font-size: 0.82rem; padding: 0.7rem 1.4rem 0; margin: 0; }
+.summary { margin-left: auto; color: var(--muted); font-size: 0.82rem; }
 
+/* A band of its own, so the top of the window reads as controls, then list.
+   Same gutter as the ledger — the block used to sit 7px inside it. */
 .filterbar {
   display: flex;
   align-items: center;
   gap: 0.8rem;
   flex-wrap: wrap;
-  padding: 0.8rem 1.4rem 0;
+  padding: 0.75rem 1.9rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .chip-divider { width: 1px; height: 1.2rem; background: var(--line); }
@@ -303,7 +307,7 @@ a:hover { text-decoration: underline; }
   display: grid;
   grid-template-columns: var(--ledger-cols);
   gap: 1rem;
-  padding: 0.6rem 1.9rem 0.2rem;
+  padding: 0.9rem 1.9rem 0.35rem;
 }
 .ledger-head button {
   background: none;
@@ -635,7 +639,7 @@ body[data-argo="off"] .ledger-head [data-sort="deployed"] { display: none; }
 .notice {
   color: var(--lamp);
   font-size: 0.82rem;
-  padding: 0.2rem 1.4rem 0;
+  padding: 0.55rem 1.9rem 0;
   margin: 0;
 }
 
