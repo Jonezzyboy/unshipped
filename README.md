@@ -82,7 +82,8 @@ since the default workflow token cannot push across repositories.
 
 ## Settings
 
-⚙ Settings → **Appearance** picks the theme. ⚙ Settings → **Integrations** holds the Argo CD
+⚙ Settings → **Appearance** picks the theme. ⚙ Settings → **Menu bar** puts the waiting count in the
+macOS menu bar (below). ⚙ Settings → **Integrations** holds the Argo CD
 connection that drives the Deployed column, laid out as the three things that have to line up.
 **Check setup** runs all three and marks each one.
 
@@ -131,6 +132,16 @@ Worst health plus sync state across every application matched to that repo; hove
 breakdown, click to open the worst one in Argo CD. The column is hidden entirely when no Argo CD
 server is configured, and a banner appears above the list if one is configured but not answering —
 so a blank cell always means "nothing deploys this repo", never "the integration is broken".
+
+## Menu bar
+
+⚙ Settings → **Menu bar** → *Show unshipped in the menu bar* adds a menu bar item carrying the number
+of repos with commits waiting. Its menu lists the six most unshipped repos — picking one opens that
+repo's release dialog — plus **Refresh now** and **Quit**.
+
+While it is on, closing the window leaves the app running in the menu bar and quitting is done from
+there; with it off, closing the window quits as before. The counts refresh every 15 minutes, since
+nothing else drives them once the window is closed.
 
 ## Later
 

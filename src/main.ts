@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 interface User { login: string; avatar_url: string }
@@ -74,6 +75,7 @@ function scheduleRender() {
     renderRepos();
     summarize();
     saveStatusCache();
+    syncMenuBar();
   }, 150);
 }
 
@@ -151,13 +153,16 @@ async function loadRepos() {
   }
 }
 
-function summarize() {
+function summaryText(): string {
   const waiting = [...statuses.values()].filter((s) => s.ahead_by > 0).length;
   const total = allRepos.length;
-  $("repo-summary").textContent =
-    waiting === 0
-      ? `${total} repos — everything is shipped.`
-      : `${waiting} of ${total} repos have unshipped commits.`;
+  return waiting === 0
+    ? `${total} repos — everything is shipped.`
+    : `${waiting} of ${total} repos have unshipped commits.`;
+}
+
+function summarize() {
+  $("repo-summary").textContent = summaryText();
 }
 
 async function fetchStatuses(repos: Repo[]) {
@@ -1099,6 +1104,43 @@ $<HTMLDialogElement>("train-dialog").addEventListener("close", () => {
   dragFrom = null;
 });
 
+// --- Menu bar ---
+
+const TRAY_LIMIT = 6;
+const TRAY_REFRESH_MS = 15 * 60_000;
+
+let menuBarOn = false;
+let menuBarTimer: number | undefined;
+
+function syncMenuBar() {
+  const waiting = [...statuses.entries()].filter(([, s]) => s.ahead_by > 0);
+  const repos = waiting
+    .sort((a, b) => b[1].ahead_by - a[1].ahead_by)
+    .slice(0, TRAY_LIMIT)
+    .map(([full_name, s]) => ({ full_name, waiting: s.ahead_by }));
+
+  invoke("set_menu_bar", {
+    enabled: menuBarOn,
+    title: allRepos.length ? String(waiting.length) : "…",
+    summary: allRepos.length ? summaryText() : "Reading repos…",
+    repos: menuBarOn ? repos : [],
+  }).catch(() => {});
+}
+
+function setMenuBar(on: boolean) {
+  menuBarOn = on;
+  clearInterval(menuBarTimer);
+  // Nothing else refreshes the counts while the window is closed.
+  menuBarTimer = on ? window.setInterval(loadRepos, TRAY_REFRESH_MS) : undefined;
+  syncMenuBar();
+}
+
+listen<string>("tray-release", (event) => {
+  const repo = allRepos.find((r) => r.full_name === event.payload);
+  if (repo) openReleaseDialog(repo);
+});
+listen("tray-refresh", () => loadRepos());
+
 // --- Themes ---
 
 const THEMES = [
@@ -1155,6 +1197,7 @@ interface Settings {
   argo_iap_client_id: string;
   argo_iap_service_account: string;
   theme: string;
+  menu_bar: boolean;
 }
 interface Unlinked { name: string; repo_urls: string[] }
 interface AppReport {
@@ -1196,6 +1239,7 @@ function currentSettings(): Settings {
     argo_iap_client_id: iap ? $<HTMLInputElement>("argo-iap-client").value.trim() : "",
     argo_iap_service_account: iap ? $<HTMLInputElement>("argo-iap-sa").value.trim() : "",
     theme: currentTheme,
+    menu_bar: menuBarOn,
   };
 }
 
@@ -1349,6 +1393,7 @@ async function openSettings() {
   $<HTMLInputElement>("argo-iap-client").value = s.argo_iap_client_id;
   $<HTMLInputElement>("argo-iap-sa").value = s.argo_iap_service_account;
   $("iap-fields").hidden = !s.argo_iap_client_id;
+  $<HTMLInputElement>("menu-bar-toggle").checked = s.menu_bar;
   renderThemeOptions();
 
   renderCheck(await invoke<ArgoCheck>("argo_check"));
@@ -1362,6 +1407,10 @@ $<HTMLInputElement>("argo-iap").onchange = (e) => {
   const on = (e.target as HTMLInputElement).checked;
   $("iap-fields").hidden = !on;
   $("auth-iap-note").hidden = !on;
+};
+$<HTMLInputElement>("menu-bar-toggle").onchange = (e) => {
+  setMenuBar((e.target as HTMLInputElement).checked);
+  invoke("save_settings", { new: currentSettings() });
 };
 $("btn-argo-check").onclick = runCheck;
 $("btn-argo-login").onclick = () =>
@@ -1445,6 +1494,7 @@ applyTheme(currentTheme);
 // settings.json is the source of truth; the localStorage copy only avoids a flash at boot.
 invoke<Settings>("get_settings").then((s) => {
   if (s.theme !== currentTheme) applyTheme(s.theme);
+  setMenuBar(s.menu_bar);
 });
 (async () => {
   demoMode = await invoke<boolean>("is_demo").catch(() => false);

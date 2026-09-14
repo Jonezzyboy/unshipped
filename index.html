@@ -79,6 +79,7 @@
         <div class="settings-layout">
           <nav class="settings-nav" aria-label="Settings sections">
             <button type="button" data-section="appearance">Appearance</button>
+            <button type="button" data-section="menubar">Menu bar</button>
             <button type="button" data-section="integrations">Integrations</button>
             <button type="button" data-section="about">About</button>
           </nav>
@@ -87,6 +88,21 @@
               <h3>Appearance</h3>
               <p class="hint">Theme applies immediately and is remembered between sessions.</p>
               <div id="theme-options" class="theme-options" role="radiogroup" aria-label="Theme"></div>
+            </section>
+
+            <section id="panel-menubar" class="settings-panel" hidden>
+              <h3>Menu bar</h3>
+              <p class="hint">
+                How much is waiting, and the repos ready to cut, without the window open.
+              </p>
+              <label class="check">
+                <input type="checkbox" id="menu-bar-toggle" />
+                Show unshipped in the menu bar
+              </label>
+              <p class="hint">
+                While this is on, closing the window leaves the app running in the menu bar — quit it from
+                there. The list refreshes every 15 minutes, and picking a repo opens its release dialog.
+              </p>
             </section>
 
             <section id="panel-integrations" class="settings-panel" hidden>
