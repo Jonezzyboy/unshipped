@@ -487,7 +487,32 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 }
 
 .check { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0; }
-.check input { width: auto; }
+
+/* The input rule above is for text fields; a native checkbox half-inherits it
+   and comes out small and system-blue whatever the theme. */
+.check input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+}
+.check input[type="checkbox"]:checked { background: var(--lamp); border-color: var(--lamp); }
+.check input[type="checkbox"]:checked::after {
+  content: "";
+  width: 3.5px;
+  height: 7.5px;
+  border: solid var(--on-accent);
+  border-width: 0 2px 2px 0;
+  transform: translateY(-1px) rotate(45deg);
+}
 
 /* A panel's own setting should not read quieter than the prose describing it. */
 .check.setting {
