@@ -203,7 +203,8 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.9rem 1.4rem;
+  /* Left inset clears the traffic lights, which float over the header. */
+  padding: 0.9rem 1.4rem 0.9rem 80px;
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
