@@ -680,7 +680,9 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
   cursor: grab;
   display: grid;
   place-items: center;
+  touch-action: none;
 }
+.train-row[data-dragging="true"] .grip { cursor: grabbing; }
 .train-row .grip:hover { color: var(--text); }
 .train-row .repo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .train-row .repo .owner { color: var(--muted); }
