@@ -869,4 +869,13 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
 }
 .panel-link:hover { color: var(--lamp); }
 #panel-open { flex: 1; text-align: left; }
-#panel-quit { color: var(--muted); }
+/* Quitting is the one thing here that cannot be undone: it sits behind a
+   divider, away from the buttons reached for by habit. */
+.panel-sep {
+  width: 1px;
+  align-self: stretch;
+  margin-block: -0.5rem;
+  background: var(--line);
+}
+#panel-quit { color: var(--muted); font-size: 0.8rem; }
+#panel-quit:hover { color: var(--err); }
