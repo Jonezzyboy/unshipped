@@ -806,6 +806,9 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
 .seg[disabled] { cursor: default; }
 
 /* --- Menu bar panel (its own window) --- */
+/* The window is transparent so the panel can round its corners; the root is
+   painted for the ledger, and painting it here squares them off again. */
+.panel-root,
 .panel-body {
   background: transparent;
   overflow: hidden;
