@@ -444,10 +444,28 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 .bump .suggested { color: var(--lamp); font-size: 0.72rem; }
 
 /* --- Settings view --- */
+/* The strip is a title bar and stays one on every view; a page needing a title
+   and a way back puts both here, where there is room beside neither. */
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.1rem 1.4rem 0;
+}
+.page-title { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: 0.02em; }
+.back {
+  border: none;
+  background: none;
+  padding: 0.2em 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.back:hover { color: var(--text); }
+
 .settings-layout {
   display: flex;
   gap: 2.5rem;
-  padding: 1.6rem 1.4rem 3rem;
+  padding: 1.2rem 1.4rem 3rem;
   max-width: 64rem;
 }
 .settings-nav {
