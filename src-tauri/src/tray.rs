@@ -1,43 +1,40 @@
-use serde::Deserialize;
-use tauri::menu::{IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
-use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, Manager, Wry};
+use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder, Wry,
+};
 
 const TRAY_ID: &str = "menu-bar";
+pub const PANEL_ID: &str = "panel";
 /// Flat black plus alpha: macOS tints a template image to match the menu bar,
 /// which the app icon's own colours cannot do.
 const TRAY_ICON: &[u8] = include_bytes!("../icons/tray.png");
-const REPO_PREFIX: &str = "repo:";
 
-#[derive(Deserialize)]
-pub struct Entry {
-    pub full_name: String,
-    pub waiting: u64,
-}
+const PANEL_WIDTH: f64 = 360.0;
+const PANEL_GAP: f64 = 6.0;
 
-pub fn apply(
-    app: &AppHandle,
-    enabled: bool,
-    title: String,
-    summary: String,
-    entries: Vec<Entry>,
-) -> Result<(), String> {
+pub fn apply(app: &AppHandle, enabled: bool, title: String) -> Result<(), String> {
     if !enabled {
+        hide_panel(app);
         app.remove_tray_by_id(TRAY_ID);
         return Ok(());
     }
 
-    let menu = build_menu(app, &summary, &entries)?;
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
         return tray.set_title(Some(title)).map_err(|e| e.to_string());
     }
 
+    // The list lives in the panel now; the menu is the right-click fallback,
+    // so it never changes and is built once.
+    let menu = right_click_menu(app)?;
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
+        .show_menu_on_left_click(false)
         .title(title)
         .tooltip("unshipped")
-        .on_menu_event(on_menu_event);
+        .on_menu_event(on_menu_event)
+        .on_tray_icon_event(on_tray_event);
     match tauri::image::Image::from_bytes(TRAY_ICON) {
         Ok(icon) => builder = builder.icon(icon),
         Err(_) => {
@@ -53,72 +50,129 @@ pub fn apply(
     builder.build(app).map(|_| ()).map_err(|e| e.to_string())
 }
 
-fn build_menu(app: &AppHandle, summary: &str, entries: &[Entry]) -> Result<Menu<Wry>, String> {
-    let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
-    let mut push = |item: Box<dyn IsMenuItem<Wry>>| items.push(item);
-
-    push(Box::new(
-        MenuItem::with_id(app, "summary", summary, false, None::<&str>)
-            .map_err(|e| e.to_string())?,
-    ));
-    push(Box::new(
-        PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
-    ));
-
-    for entry in entries {
-        let label = format!("{} — {} waiting", entry.full_name, entry.waiting);
-        push(Box::new(
-            MenuItem::with_id(
-                app,
-                format!("{REPO_PREFIX}{}", entry.full_name),
-                label,
-                true,
-                None::<&str>,
-            )
-            .map_err(|e| e.to_string())?,
-        ));
-    }
-    if !entries.is_empty() {
-        push(Box::new(
-            PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
-        ));
-    }
-
-    push(Box::new(
-        MenuItem::with_id(app, "open", "Open unshipped", true, None::<&str>)
-            .map_err(|e| e.to_string())?,
-    ));
-    push(Box::new(
-        MenuItem::with_id(app, "refresh", "Refresh now", true, None::<&str>)
-            .map_err(|e| e.to_string())?,
-    ));
-    push(Box::new(
-        PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
-    ));
-    push(Box::new(
-        PredefinedMenuItem::quit(app, Some("Quit unshipped")).map_err(|e| e.to_string())?,
-    ));
-
-    let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| i.as_ref()).collect();
-    Menu::with_items(app, &refs).map_err(|e| e.to_string())
+fn right_click_menu(app: &AppHandle) -> Result<Menu<Wry>, String> {
+    let open = MenuItem::with_id(app, "open", "Open unshipped", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    let refresh = MenuItem::with_id(app, "refresh", "Refresh now", true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    let sep = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
+    let quit = PredefinedMenuItem::quit(app, Some("Quit unshipped")).map_err(|e| e.to_string())?;
+    Menu::with_items(app, &[&open, &refresh, &sep, &quit]).map_err(|e| e.to_string())
 }
 
 fn on_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id().as_ref() {
-        "open" => show_window(app),
+        "open" => show_main(app),
         "refresh" => {
             let _ = app.emit("tray-refresh", ());
         }
-        id => {
-            if let Some(repo) = id.strip_prefix(REPO_PREFIX) {
-                show_window(app);
-                let _ = app.emit("tray-release", repo);
+        _ => {}
+    }
+}
+
+fn on_tray_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
+    if let TrayIconEvent::Click {
+        button: MouseButton::Left,
+        button_state: MouseButtonState::Up,
+        rect,
+        ..
+    } = event
+    {
+        let app = tray.app_handle();
+        match app.get_webview_window(PANEL_ID) {
+            Some(panel) if panel.is_visible().unwrap_or(false) => hide_panel(app),
+            _ => {
+                let _ = show_panel(app, rect);
             }
         }
     }
 }
 
-fn show_window(app: &AppHandle) {
+fn panel(app: &AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window(PANEL_ID) {
+        return Ok(window);
+    }
+    WebviewWindowBuilder::new(app, PANEL_ID, WebviewUrl::App("panel.html".into()))
+        .title("unshipped")
+        .inner_size(PANEL_WIDTH, 260.0)
+        .decorations(false)
+        .resizable(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .transparent(true)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// macOS only highlights the status item while it owns a native menu, so a
+/// panel of our own has to light the button up itself.
+#[cfg(target_os = "macos")]
+fn highlight(app: &AppHandle, on: bool) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let _ = tray.with_inner_tray_icon(move |inner| {
+        let Some(mtm) = objc2_foundation::MainThreadMarker::new() else {
+            return;
+        };
+        let Some(button) = inner.ns_status_item().and_then(|item| item.button(mtm)) else {
+            return;
+        };
+        unsafe {
+            let _: () = objc2::msg_send![&*button, setHighlighted: on];
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn highlight(_app: &AppHandle, _on: bool) {}
+
+pub fn hide_panel(app: &AppHandle) {
+    if let Some(panel) = app.get_webview_window(PANEL_ID) {
+        let _ = panel.hide();
+    }
+    highlight(app, false);
+}
+
+fn show_panel(app: &AppHandle, rect: tauri::Rect) -> Result<(), String> {
+    let panel = panel(app)?;
+    let scale = panel.scale_factor().unwrap_or(1.0);
+    let icon = rect.position.to_physical::<f64>(scale);
+    let icon_size = rect.size.to_physical::<f64>(scale);
+    let size = panel.outer_size().map_err(|e| e.to_string())?;
+
+    let mut x = icon.x + icon_size.width / 2.0 - size.width as f64 / 2.0;
+    // Keep it on screen when the item sits at the right end of the bar.
+    if let Ok(Some(monitor)) = panel.current_monitor() {
+        let right = monitor.position().x as f64 + monitor.size().width as f64;
+        x = x.min(right - size.width as f64 - 8.0 * scale);
+        x = x.max(monitor.position().x as f64 + 8.0 * scale);
+    }
+    let y = icon.y + icon_size.height + PANEL_GAP * scale;
+
+    panel
+        .set_position(PhysicalPosition::new(x, y))
+        .map_err(|e| e.to_string())?;
+    panel.show().map_err(|e| e.to_string())?;
+    panel.set_focus().map_err(|e| e.to_string())?;
+    highlight(app, true);
+    Ok(())
+}
+
+/// The panel reports what its content actually needs; the window has no
+/// decorations to size itself against.
+pub fn resize(app: &AppHandle, height: f64) -> Result<(), String> {
+    let Some(panel) = app.get_webview_window(PANEL_ID) else {
+        return Ok(());
+    };
+    panel
+        .set_size(LogicalSize::new(PANEL_WIDTH, height.clamp(120.0, 620.0)))
+        .map_err(|e| e.to_string())
+}
+
+pub fn show_main(app: &AppHandle) {
+    hide_panel(app);
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();

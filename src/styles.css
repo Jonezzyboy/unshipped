@@ -804,3 +804,81 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
   background: color-mix(in srgb, var(--lamp) 9%, transparent);
 }
 .seg[disabled] { cursor: default; }
+
+/* --- Menu bar panel (its own window) --- */
+/* The window is transparent so the panel can round its corners; the root is
+   painted for the ledger, and painting it here squares them off again. */
+.panel-root,
+.panel-body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.panel-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.4rem 0.5rem;
+  padding: 0.7rem 0.9rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+.panel-head .wordmark { font-size: 0.95rem; }
+.panel-checked { color: var(--muted); font-size: 0.78rem; align-self: center; }
+.panel-summary { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 0.82rem; }
+.panel-section {
+  padding: 0.55rem 0.9rem 0.2rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+}
+.panel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.9rem;
+}
+.panel-row:hover { background: var(--surface-2); }
+.panel-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-name .owner { color: var(--muted); }
+.panel-row .lamp { font-size: 0.78rem; padding: 0.1em 0.6em; }
+.panel-row button { font-size: 0.78rem; padding: 0.2em 0.6em; }
+.panel-more { padding: 0.2rem 0.9rem 0.5rem; color: var(--muted); font-size: 0.78rem; }
+.panel-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.9rem;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+.panel-link {
+  border: none;
+  background: none;
+  padding: 0.2em 0;
+  font-size: 0.85rem;
+}
+.panel-link:hover { color: var(--lamp); }
+#panel-open { flex: 1; text-align: left; }
+/* Quitting is the one thing here that cannot be undone: it sits behind a
+   divider, away from the buttons reached for by habit. */
+.panel-sep {
+  width: 1px;
+  align-self: stretch;
+  margin-block: -0.5rem;
+  background: var(--line);
+}
+#panel-quit { color: var(--muted); font-size: 0.8rem; }
+#panel-quit:hover { color: var(--err); }

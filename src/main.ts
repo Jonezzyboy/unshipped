@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 interface User { login: string; avatar_url: string }
@@ -83,6 +83,7 @@ function scheduleRender() {
 
 const REPOS_KEY = "unshipped:repos:v1";
 const STATUS_KEY = "unshipped:statuses:v1";
+const CHECKED_KEY = "unshipped:checked:v1";
 
 // Demo mode gets its own cache namespace so canned data never mixes with real data.
 let demoMode = false;
@@ -148,6 +149,9 @@ async function loadRepos() {
     renderRepos();
     summarize();
     saveStatusCache();
+    // The panel is a separate window with no state of its own; it reads this.
+    localStorage.setItem(cacheKey(CHECKED_KEY), new Date().toISOString());
+    emit("ledger-updated");
   } catch (e) {
     $("repo-summary").textContent = String(e);
   }
@@ -1134,24 +1138,16 @@ $<HTMLDialogElement>("train-dialog").addEventListener("close", () => {
 
 // --- Menu bar ---
 
-const TRAY_LIMIT = 6;
 const TRAY_REFRESH_MS = 15 * 60_000;
 
 let menuBarOn = false;
 let menuBarTimer: number | undefined;
 
 function syncMenuBar() {
-  const waiting = [...statuses.entries()].filter(([, s]) => s.ahead_by > 0);
-  const repos = waiting
-    .sort((a, b) => b[1].ahead_by - a[1].ahead_by)
-    .slice(0, TRAY_LIMIT)
-    .map(([full_name, s]) => ({ full_name, waiting: s.ahead_by }));
-
+  const waiting = [...statuses.values()].filter((s) => s.ahead_by > 0).length;
   invoke("set_menu_bar", {
     enabled: menuBarOn,
-    title: allRepos.length ? String(waiting.length) : "…",
-    summary: allRepos.length ? summaryText() : "Reading repos…",
-    repos: menuBarOn ? repos : [],
+    title: allRepos.length ? String(waiting) : "…",
   }).catch(() => {});
 }
 

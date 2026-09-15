@@ -10,7 +10,7 @@ mod version;
 
 use auth::token;
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 const ARGO_TOKEN_KEY: &str = "argo_token";
 
@@ -115,17 +115,39 @@ fn argo_repo_annotation() -> &'static str {
     argo::REPO_ANNOTATION
 }
 
-/// The ledger owns the counts, so it hands the menu bar its whole contents —
-/// this only rebuilds it.
+/// The ledger owns the counts, so it hands the menu bar its title.
 #[tauri::command]
-fn set_menu_bar(
-    app: tauri::AppHandle,
-    enabled: bool,
-    title: String,
-    summary: String,
-    repos: Vec<tray::Entry>,
-) -> Result<(), String> {
-    tray::apply(&app, enabled, title, summary, repos)
+fn set_menu_bar(app: tauri::AppHandle, enabled: bool, title: String) -> Result<(), String> {
+    tray::apply(&app, enabled, title)
+}
+
+#[tauri::command]
+fn resize_panel(app: tauri::AppHandle, height: f64) -> Result<(), String> {
+    tray::resize(&app, height)
+}
+
+#[tauri::command]
+fn focus_main(app: tauri::AppHandle) {
+    tray::show_main(&app);
+}
+
+/// The panel asks the ledger to do the work: emitting from the panel window
+/// would need an event permission it does not have, and the ordering here is
+/// guaranteed — the window is up before the dialog is asked for.
+#[tauri::command]
+fn panel_release(app: tauri::AppHandle, repo: String) {
+    tray::show_main(&app);
+    let _ = app.emit("tray-release", repo);
+}
+
+#[tauri::command]
+fn panel_refresh(app: tauri::AppHandle) {
+    let _ = app.emit("tray-refresh", ());
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 #[derive(Serialize)]
@@ -341,22 +363,28 @@ pub fn run() {
             generate_notes,
             create_release,
             set_menu_bar,
+            resize_panel,
+            focus_main,
+            panel_release,
+            panel_refresh,
+            quit_app,
         ])
         .setup(|app| {
             // The ledger fills in the counts a moment later; the item exists from
             // launch so the app is reachable even if the window never opens.
             if settings::load(app.handle()).menu_bar {
-                let _ = tray::apply(
-                    app.handle(),
-                    true,
-                    String::from("…"),
-                    String::from("Reading repos…"),
-                    Vec::new(),
-                );
+                let _ = tray::apply(app.handle(), true, String::from("…"));
             }
             Ok(())
         })
         .on_window_event(|window, event| {
+            // The panel is a menu: it goes away the moment it is not the focus.
+            if window.label() == tray::PANEL_ID {
+                if let tauri::WindowEvent::Focused(false) = event {
+                    tray::hide_panel(&window.app_handle().clone());
+                }
+                return;
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // With a menu bar item there is somewhere to come back from;
                 // without one, closing the window has to mean quit.
