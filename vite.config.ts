@@ -10,6 +10,12 @@ export default defineConfig(async () => ({
   //
   // 1. prevent Vite from obscuring rust errors
   clearScreen: false,
+  // The menu bar panel is its own window, so its own page.
+  build: {
+    rollupOptions: {
+      input: { main: "index.html", panel: "panel.html" },
+    },
+  },
   // 2. tauri expects a fixed port, fail if that port is not available
   server: {
     port: 1420,

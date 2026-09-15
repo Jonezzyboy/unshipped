@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>unshipped</title>
+    <script type="module" src="/src/panel.ts" defer></script>
+  </head>
+  <body class="panel-body">
+    <div class="panel">
+      <header class="panel-head">
+        <span class="wordmark">unshipped<span class="mark-dot">.</span></span>
+        <span id="panel-checked" class="panel-checked"></span>
+        <p id="panel-summary" class="panel-summary"></p>
+      </header>
+      <div id="panel-list"></div>
+      <footer class="panel-foot">
+        <button type="button" id="panel-open" class="panel-link">Open unshipped</button>
+        <button type="button" id="panel-quit" class="panel-link">Quit</button>
+        <button type="button" id="panel-refresh" class="icon-btn" title="Refresh now" aria-label="Refresh now">
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 1.5v3h-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </footer>
+    </div>
+  </body>
+</html>
