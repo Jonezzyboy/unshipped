@@ -131,7 +131,7 @@ html, body { overscroll-behavior: none; }
 [hidden] { display: none !important; }
 
 .wordmark {
-  font-size: 1.15rem;
+  font-size: 0.95rem;
   font-weight: 650;
   letter-spacing: 0.02em;
   margin: 0;
@@ -199,25 +199,24 @@ a:hover { text-decoration: underline; }
 #btn-retry { width: 100%; margin-top: 1rem; }
 
 /* --- Topbar + ledger --- */
+/* The strip macOS keeps for the window buttons: measured, they span x 9–62.5
+   and centre on 15.75, so nothing with a 36px field in it could ever line up
+   with them. The strip carries the name and the account and leaves them be;
+   everything that takes a click lives below it. */
 .topbar {
   display: flex;
   align-items: center;
   gap: 1rem;
-  /* Left inset clears the traffic lights, which float over the header.
-     55px less the border puts the content line on 27px. The lights are placed
-     by trafficLightPosition in tauri.conf.json, and that number is NOT the
-     button's top edge — measured against real pixels, y 29.25 lands their
-     centre on this same 27px. Move one and the other needs re-measuring. */
-  min-height: 55px;
-  padding: 0 1.4rem 0 80px;
-  border-bottom: 1px solid var(--line);
+  min-height: 32px;
+  padding: 0 1.4rem 0 74px;
   position: sticky;
   top: 0;
   background: var(--bg);
   z-index: 2;
 }
-.search-wrap { position: relative; display: flex; align-items: center; width: 18rem; }
-.topbar #search { padding-right: 1.8rem; }
+.search-wrap { position: relative; display: flex; align-items: center; width: 16rem; }
+/* Shorter than a standalone field: in the band it sits beside 24px chips. */
+.filterbar #search { padding: 0.3em 1.8rem 0.3em 0.7em; }
 .search-clear {
   position: absolute;
   right: 0.25rem;
@@ -240,7 +239,7 @@ a:hover { text-decoration: underline; }
   color: var(--muted);
 }
 .icon-btn:hover { color: var(--text); background: var(--surface); }
-.avatar { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); }
+.avatar { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); }
 #username { color: var(--muted); font-size: 0.85rem; }
 
 .profile-menu { position: relative; }
@@ -663,8 +662,7 @@ body[data-argo="off"] .ledger-head [data-sort="deployed"] { display: none; }
 .deploy[data-state="bad"] .dot { color: var(--err); }
 
 @media (max-width: 640px) {
-  /* Wrapped rows need the padding the fixed height would otherwise supply. */
-  .topbar { padding-top: 0.6rem; padding-bottom: 0.6rem; }
+  .topbar { padding-top: 0.3rem; padding-bottom: 0.3rem; }
   .repo-row, .ledger-head { grid-template-columns: 1.1rem 1fr auto auto; }
   .repo-tag, .repo-age, .deploy,
   .ledger-head [data-sort="tag"], .ledger-head [data-sort="released"],
