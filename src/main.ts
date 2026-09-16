@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { isWaiting } from "./waiting";
 
 interface User { login: string; avatar_url: string }
 interface AuthStatus { user: User | null; error: string | null }
@@ -158,7 +159,9 @@ async function loadRepos() {
 }
 
 function summaryText(): string {
-  const waiting = [...statuses.values()].filter((s) => s.ahead_by > 0).length;
+  const waiting = allRepos.filter(
+    (r) => isWaiting(statuses.get(r.full_name), pinnedSet.has(r.full_name))
+  ).length;
   const total = allRepos.length;
   return waiting === 0
     ? `${total} repos — everything is shipped.`
@@ -304,6 +307,9 @@ function togglePin(repo: Repo) {
   else pinnedSet.add(repo.full_name);
   localStorage.setItem(cacheKey(PINS_KEY), JSON.stringify([...pinnedSet]));
   renderRepos();
+  // A pin can put an unreleased repo in the menu bar, or take one out of it.
+  syncMenuBar();
+  emit("ledger-updated");
 }
 
 function pinnedRepos(): Repo[] {
@@ -1144,7 +1150,9 @@ let menuBarOn = false;
 let menuBarTimer: number | undefined;
 
 function syncMenuBar() {
-  const waiting = [...statuses.values()].filter((s) => s.ahead_by > 0).length;
+  const waiting = allRepos.filter(
+    (r) => isWaiting(statuses.get(r.full_name), pinnedSet.has(r.full_name))
+  ).length;
   invoke("set_menu_bar", {
     enabled: menuBarOn,
     title: allRepos.length ? String(waiting) : "…",
