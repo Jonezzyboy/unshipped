@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { isWaiting, type WaitingStatus } from "./waiting";
+import { isWaiting } from "./waiting";
+import { DEFAULT_RULES, flagReasons, type RepoRule, type RuleStatus, type Rules } from "./rules";
 
 interface Repo { name: string; full_name: string; owner: { login: string } }
-interface CachedStatus { status: WaitingStatus }
+interface CachedStatus { status: RuleStatus }
+interface Settings { rules: Rules; repo_rules: Record<string, RepoRule> }
+interface Waiting { repo: Repo; ahead: number; reasons: string[] }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -31,13 +34,18 @@ function heat(ahead: number): string {
   return ahead >= 20 ? "hot" : "warm";
 }
 
-function summaryText(cached: number, released: number, waiting: number): string {
+const BELL_SVG =
+  '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="currentColor">' +
+  '<path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Z"/></svg>';
+
+function summaryText(cached: number, released: number, waiting: number, flagged: number): string {
   if (cached === 0) return "Open the window once to fill this in.";
+  if (flagged > 0) return `${flagged} ${flagged === 1 ? "repo has" : "repos have"} tripped a rule.`;
   if (waiting > 0) return `${waiting} ${waiting === 1 ? "repo has" : "repos have"} commits waiting to ship.`;
   return released === 0 ? "No releases yet — nothing to ship." : "Everything released is shipped.";
 }
 
-function row(repo: Repo, ahead: number): HTMLElement {
+function row({ repo, ahead, reasons }: Waiting): HTMLElement {
   const el = document.createElement("div");
   el.className = "panel-row";
 
@@ -48,6 +56,14 @@ function row(repo: Repo, ahead: number): HTMLElement {
   owner.textContent = `${repo.owner.login} / `;
   name.append(owner, document.createTextNode(repo.name));
   name.title = repo.full_name;
+
+  if (reasons.length) {
+    const flag = document.createElement("span");
+    flag.className = "flag-mark";
+    flag.innerHTML = BELL_SVG;
+    flag.title = reasons.join(" · ");
+    el.append(flag);
+  }
 
   const pill = document.createElement("span");
   pill.className = "lamp";
@@ -66,6 +82,9 @@ function row(repo: Repo, ahead: number): HTMLElement {
 async function render() {
   const demo = await invoke<boolean>("is_demo").catch(() => false);
   const key = (k: string) => (demo ? `demo:${k}` : k);
+  const settings = await invoke<Settings>("get_settings").catch(() => null);
+  const rules = { ...DEFAULT_RULES, ...(settings?.rules ?? {}) };
+  const repoRules = settings?.repo_rules ?? {};
 
   document.documentElement.dataset.theme = localStorage.getItem("unshipped:theme") ?? "harbor";
 
@@ -74,19 +93,29 @@ async function render() {
   const pins = new Set(readCache<string[]>(key("unshipped:pins:v1")) ?? []);
   $("panel-checked").textContent = since(localStorage.getItem(key("unshipped:checked:v1")));
 
-  const waiting = repos
+  const waiting: Waiting[] = repos
     .map((repo) => ({ repo, status: statuses[repo.full_name]?.status }))
     .filter((x) => isWaiting(x.status, pins.has(x.repo.full_name)))
-    .map((x) => ({ repo: x.repo, ahead: x.status!.ahead_by }))
-    .sort((a, b) => b.ahead - a.ahead);
+    .map((x) => ({
+      repo: x.repo,
+      ahead: x.status!.ahead_by,
+      reasons: flagReasons(x.status, {
+        rules,
+        override: repoRules[x.repo.full_name],
+        pinned: pins.has(x.repo.full_name),
+      }),
+    }))
+    // A tripped rule is the whole point of the panel; the count breaks the tie.
+    .sort((a, b) => Number(b.reasons.length > 0) - Number(a.reasons.length > 0) || b.ahead - a.ahead);
 
   const [pinned, rest] = [
     waiting.filter((x) => pins.has(x.repo.full_name)),
     waiting.filter((x) => !pins.has(x.repo.full_name)),
   ];
   const released = repos.filter((r) => statuses[r.full_name]?.status.latest_tag).length;
+  const flagged = waiting.filter((x) => x.reasons.length).length;
 
-  $("panel-summary").textContent = summaryText(repos.length, released, waiting.length);
+  $("panel-summary").textContent = summaryText(repos.length, released, waiting.length, flagged);
 
   const list = $("panel-list");
   list.innerHTML = "";
@@ -99,7 +128,7 @@ async function render() {
     el.className = "panel-section";
     el.textContent = label;
     list.append(el);
-    for (const { repo, ahead } of rows) list.append(row(repo, ahead));
+    for (const entry of rows) list.append(row(entry));
   }
 
   const hidden = waiting.length - shownPins.length - shownRest.length;

@@ -103,7 +103,8 @@ it survive being flattened to a single colour at 16px.
 ## Settings
 
 ⚙ Settings → **Appearance** picks the theme. ⚙ Settings → **Menu bar** puts the waiting count in the
-macOS menu bar (below). ⚙ Settings → **Integrations** holds the Argo CD
+macOS menu bar (below). ⚙ Settings → **Shipping rules** decides when a repo is worth flagging
+(below). ⚙ Settings → **Integrations** holds the Argo CD
 connection that drives the Deployed column, laid out as the three things that have to line up.
 **Check setup** runs all three and marks each one.
 
@@ -153,11 +154,36 @@ breakdown, click to open the worst one in Argo CD. The column is hidden entirely
 server is configured, and a banner appears above the list if one is configured but not answering —
 so a blank cell always means "nothing deploys this repo", never "the integration is broken".
 
+## Shipping rules
+
+⚙ Settings → **Shipping rules** draws the line between "some commits are waiting" and "this one needs
+attention". A repo with commits waiting is flagged when it crosses one of them:
+
+- **Commits waiting** — 10 by default.
+- **Days since the last release** — 14 by default.
+- **A breaking change is waiting** — off by default; read from the same conventional-commit markers
+  that drive the version suggestion, at no extra API cost (the commits are already fetched).
+
+A flagged repo carries a bell in its row, has its own **Flagged** filter chip, and leads the menu bar
+panel. Hovering the bell says which lines it crossed.
+
+**Notify me** sends a macOS notification when a repo trips a rule — once per repo per day, and never
+while the window is open, since the ledger is the notification when you are looking at it. Three or
+more at once arrive as one summary rather than a burst.
+
+**Only flag pinned repos** narrows all of it to the repos you pinned, which is the difference between
+a useful signal and a hundred flags.
+
+Any row's bell sets a per-repo override: its own thresholds, or never flag this one. Overrides
+are listed in the settings panel and stored in `settings.json` alongside the rest.
+
 ## Menu bar
 
 ⚙ Settings → **Menu bar** → *Show unshipped in the menu bar* adds a menu bar item carrying the number
-of repos with commits waiting. Its menu lists the six most unshipped repos — picking one opens that
-repo's release dialog — plus **Refresh now** and **Quit**.
+of repos with commits waiting. Clicking it opens a panel listing up to five of them — pinned repos
+first, then the rest, with anything that has tripped a shipping rule at the top of each group.
+Repos that have never been released stay out of it unless you have pinned one. **Release…** on a row
+opens that repo's release dialog; the panel also carries **Open unshipped**, refresh and **Quit**.
 
 While it is on, closing the window leaves the app running in the menu bar and quitting is done from
 there; with it off, closing the window quits as before. The counts refresh every 15 minutes, since
