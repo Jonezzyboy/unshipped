@@ -160,7 +160,8 @@ async function loadRepos() {
     const stale = seedFromCache(allRepos);
     renderRepos();
     summarize();
-    await fetchStatuses(stale);
+    // Collapsed sections aren't polled; expanding one fetches what it missed.
+    await fetchStatuses(stale.filter((r) => !inCollapsedSection(r)));
     renderRepos();
     summarize();
     saveStatusCache();
@@ -482,10 +483,59 @@ function buildRow(repo: Repo): HTMLElement {
   return li;
 }
 
-function sectionLabel(text: string): HTMLElement {
+// --- Collapsible sections: collapsed repos are also skipped when polling statuses ---
+
+type SectionId = "pinned" | "all";
+const COLLAPSED_KEY = "unshipped:collapsed:v1";
+let collapsedSections = new Set<SectionId>();
+
+function sectionOf(repo: Repo): SectionId {
+  return pinnedSet.has(repo.full_name) ? "pinned" : "all";
+}
+
+// "All repos" only collapses behind its header, which exists only when there
+// are pins — otherwise a stale collapsed state would leave the list empty
+// with nothing to click.
+function inCollapsedSection(repo: Repo): boolean {
+  const id = sectionOf(repo);
+  if (id === "all" && pinnedSet.size === 0) return false;
+  return collapsedSections.has(id);
+}
+
+function toggleSection(id: SectionId) {
+  if (collapsedSections.has(id)) {
+    collapsedSections.delete(id);
+    // The poller skipped these while collapsed — catch up now.
+    const missing = allRepos.filter(
+      (r) => sectionOf(r) === id && !statuses.has(r.full_name)
+    );
+    if (missing.length) {
+      fetchStatuses(missing).then(() => {
+        renderRepos();
+        summarize();
+        saveStatusCache();
+      });
+    }
+  } else {
+    collapsedSections.add(id);
+  }
+  localStorage.setItem(cacheKey(COLLAPSED_KEY), JSON.stringify([...collapsedSections]));
+  renderRepos();
+}
+
+function sectionHeader(id: SectionId, text: string, count: number): HTMLElement {
   const li = document.createElement("li");
   li.className = "section-label";
-  li.textContent = text;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  const collapsed = collapsedSections.has(id);
+  btn.setAttribute("aria-expanded", String(!collapsed));
+  const chevron = document.createElement("span");
+  chevron.className = "chevron";
+  chevron.textContent = "▸";
+  btn.append(chevron, document.createTextNode(collapsed ? `${text} (${count})` : text));
+  btn.onclick = () => toggleSection(id);
+  li.append(btn);
   return li;
 }
 
@@ -497,13 +547,16 @@ function renderRepos() {
   list.innerHTML = "";
 
   const pins = pinnedRepos();
+  const repos = sortedRepos();
   if (pins.length) {
-    list.append(sectionLabel("Pinned"));
-    for (const repo of pins) list.append(buildRow(repo));
-    list.append(sectionLabel("All repos"));
+    list.append(sectionHeader("pinned", "Pinned", pins.length));
+    if (!collapsedSections.has("pinned")) {
+      for (const repo of pins) list.append(buildRow(repo));
+    }
+    list.append(sectionHeader("all", "All repos", repos.length));
+    if (collapsedSections.has("all")) return;
   }
 
-  const repos = sortedRepos();
   for (const repo of repos.slice(0, visibleLimit)) {
     list.append(buildRow(repo));
   }
@@ -1806,5 +1859,6 @@ invoke<Settings>("get_settings").then((s) => {
   statusCache = readCache<Record<string, CachedStatus>>(cacheKey(STATUS_KEY)) ?? {};
   setArgoColumn(localStorage.getItem(cacheKey(ARGO_COLUMN_KEY)) === "true");
   pinnedSet = new Set(readCache<string[]>(cacheKey(PINS_KEY)) ?? []);
+  collapsedSections = new Set(readCache<SectionId[]>(cacheKey(COLLAPSED_KEY)) ?? []);
   checkAuth();
 })();

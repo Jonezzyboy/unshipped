@@ -405,13 +405,29 @@ a:hover { text-decoration: underline; }
 .repo-row .actions .pin[aria-pressed="true"] { opacity: 1; color: var(--lamp); }
 
 .section-label {
+  padding: 1rem 0 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
+.section-label button {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  background: none;
+  border: none;
+  padding: 0 0.5rem;
+  font: inherit;
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.09em;
   color: var(--muted);
-  padding: 1rem 0.5rem 0.3rem;
-  border-bottom: 1px solid var(--line);
+  cursor: pointer;
 }
+.section-label button:hover { color: var(--text); }
+.section-label .chevron {
+  font-size: 0.8em;
+  transition: transform 0.15s;
+}
+.section-label button[aria-expanded="true"] .chevron { transform: rotate(90deg); }
 .load-more {
   padding: 1rem 0.5rem;
   text-align: center;
