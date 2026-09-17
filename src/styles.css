@@ -513,6 +513,8 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 }
 
 .check { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.85rem; margin: 0.6rem 0; }
+/* The whole label toggles the box, so the whole label has to look like it does. */
+.check, .check input { cursor: pointer; }
 
 /* The input rule above is for text fields; a native checkbox half-inherits it
    and comes out small and system-blue whatever the theme. */
