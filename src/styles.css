@@ -123,6 +123,49 @@ html[data-theme="paper"] {
   color-scheme: light;
 }
 
+html[data-theme="graphite"] {
+  --bg: #1f1f1f;
+  --surface: #262626;
+  --surface-2: #2d2d2d;
+  --line: #3a3a3a;
+  --text: #e8e8e8;
+  --muted: #9a9a9a;
+  --lamp: #f2c14e;
+  --lamp-hot: #ff6f4a;
+  --ok: #56d364;
+  --err: #f47067;
+  --on-accent: #1a1204;
+}
+
+html[data-theme="lagoon"] {
+  --bg: #06181b;
+  --surface: #0b2226;
+  --surface-2: #102c31;
+  --line: #1a3a40;
+  --text: #d8ecee;
+  --muted: #6f9299;
+  --lamp: #2dd4bf;
+  --lamp-hot: #ff7a5c;
+  --ok: #4ade80;
+  --err: #ff5c6c;
+  --on-accent: #04211d;
+}
+
+html[data-theme="blossom"] {
+  --bg: #f9eff1;
+  --surface: #fffafb;
+  --surface-2: #f1e2e6;
+  --line: #e2ccd3;
+  --text: #38262d;
+  --muted: #8c707a;
+  --lamp: #b0325f;
+  --lamp-hot: #c2410c;
+  --ok: #1a7f4e;
+  --err: #bf2f27;
+  --on-accent: #ffffff;
+  color-scheme: light;
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; }
 /* WKWebView rubber-bands past the last row, which reads as an endless list. */
