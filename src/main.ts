@@ -1403,6 +1403,11 @@ function renderThemeOptions() {
 
 // --- Settings ---
 
+interface PanelSections {
+  pinned: boolean;
+  waiting: boolean;
+  recent: boolean;
+}
 interface Settings {
   argo_url: string;
   argo_insecure: boolean;
@@ -1410,9 +1415,12 @@ interface Settings {
   argo_iap_service_account: string;
   theme: string;
   menu_bar: boolean;
+  panel_sections: PanelSections;
   rules: Rules;
   repo_rules: Record<string, RepoRule>;
 }
+
+let panelSections: PanelSections = { pinned: true, waiting: true, recent: true };
 interface Unlinked { name: string; repo_urls: string[] }
 interface AppReport {
   total: number;
@@ -1454,6 +1462,7 @@ function currentSettings(): Settings {
     argo_iap_service_account: iap ? $<HTMLInputElement>("argo-iap-sa").value.trim() : "",
     theme: currentTheme,
     menu_bar: menuBarOn,
+    panel_sections: panelSections,
     rules,
     repo_rules: repoRules,
   };
@@ -1748,6 +1757,9 @@ async function openSettings() {
   $<HTMLInputElement>("argo-iap-sa").value = s.argo_iap_service_account;
   $("iap-fields").hidden = !s.argo_iap_client_id;
   $<HTMLInputElement>("menu-bar-toggle").checked = s.menu_bar;
+  $<HTMLInputElement>("panel-sec-pinned").checked = panelSections.pinned;
+  $<HTMLInputElement>("panel-sec-waiting").checked = panelSections.waiting;
+  $<HTMLInputElement>("panel-sec-recent").checked = panelSections.recent;
   renderRulesPanel();
   renderThemeOptions();
 
@@ -1767,6 +1779,14 @@ $<HTMLInputElement>("menu-bar-toggle").onchange = (e) => {
   setMenuBar((e.target as HTMLInputElement).checked);
   invoke("save_settings", { new: currentSettings() });
 };
+for (const key of ["pinned", "waiting", "recent"] as const) {
+  $<HTMLInputElement>(`panel-sec-${key}`).onchange = (e) => {
+    panelSections[key] = (e.target as HTMLInputElement).checked;
+    invoke("save_settings", { new: currentSettings() });
+    // The panel re-renders on this event, so an open panel updates live.
+    emit("ledger-updated");
+  };
+}
 $("btn-argo-check").onclick = runCheck;
 $("btn-argo-login").onclick = () =>
   connect(() =>
@@ -1864,6 +1884,7 @@ invoke<Settings>("get_settings").then((s) => {
   if (s.theme !== currentTheme) applyTheme(s.theme);
   rules = { ...DEFAULT_RULES, ...s.rules };
   repoRules = s.repo_rules ?? {};
+  panelSections = { ...panelSections, ...s.panel_sections };
   setMenuBar(s.menu_bar);
   if (allRepos.length) renderRepos();
 });

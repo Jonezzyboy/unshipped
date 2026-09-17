@@ -18,9 +18,28 @@ pub struct Settings {
     #[serde(default)]
     pub menu_bar: bool,
     #[serde(default)]
+    pub panel_sections: PanelSections,
+    #[serde(default)]
     pub rules: Rules,
     #[serde(default)]
     pub repo_rules: BTreeMap<String, RepoRule>,
+}
+
+/// Which sections the menu bar panel shows.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PanelSections {
+    #[serde(default = "on")]
+    pub pinned: bool,
+    #[serde(default = "on")]
+    pub waiting: bool,
+    #[serde(default = "on")]
+    pub recent: bool,
+}
+
+impl Default for PanelSections {
+    fn default() -> Self {
+        Self { pinned: true, waiting: true, recent: true }
+    }
 }
 
 /// When a repo with commits waiting is worth flagging.
@@ -92,6 +111,7 @@ impl Default for Settings {
             argo_iap_service_account: String::new(),
             theme: default_theme(),
             menu_bar: false,
+            panel_sections: PanelSections::default(),
             rules: Rules::default(),
             repo_rules: BTreeMap::new(),
         }

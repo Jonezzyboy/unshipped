@@ -990,6 +990,15 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
 .panel-row .lamp { font-size: 0.78rem; padding: 0.1em 0.6em; }
 .panel-row button { font-size: 0.78rem; padding: 0.2em 0.6em; }
 .panel-more { padding: 0.2rem 0.9rem 0.5rem; color: var(--muted); font-size: 0.78rem; }
+.panel-when { color: var(--muted); font-size: 0.78rem; flex-shrink: 0; }
+.panel-tag {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  flex-shrink: 0;
+}
+a.panel-tag { color: var(--lamp); text-decoration: none; }
+a.panel-tag:hover { text-decoration: underline; }
 .panel-foot {
   display: flex;
   align-items: center;
