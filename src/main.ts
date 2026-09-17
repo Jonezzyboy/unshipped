@@ -868,6 +868,21 @@ function cancelAutoClose() {
   autoCloseTimer = undefined;
 }
 
+function startAutoClose(hint: HTMLElement, dialog: HTMLDialogElement) {
+  cancelAutoClose();
+  let left = AUTO_CLOSE_SECONDS;
+  hint.textContent = `Closing in ${left}…`;
+  autoCloseTimer = setInterval(() => {
+    left -= 1;
+    if (left > 0) {
+      hint.textContent = `Closing in ${left}…`;
+      return;
+    }
+    cancelAutoClose();
+    dialog.close();
+  }, 1000);
+}
+
 function showReleaseSuccess(repo: Repo, tag: string, url: string) {
   $("rel-body").hidden = true;
   $("rel-loading").hidden = true;
@@ -878,18 +893,7 @@ function showReleaseSuccess(repo: Repo, tag: string, url: string) {
   // Opening the release cancels the countdown — the dialog shouldn't vanish mid-read.
   link.onclick = (e) => { e.preventDefault(); cancelAutoClose(); $("rel-close-hint").textContent = ""; openUrl(url); };
 
-  const hint = $("rel-close-hint");
-  let left = AUTO_CLOSE_SECONDS;
-  hint.textContent = `Closing in ${left}…`;
-  autoCloseTimer = setInterval(() => {
-    left -= 1;
-    if (left > 0) {
-      hint.textContent = `Closing in ${left}…`;
-      return;
-    }
-    cancelAutoClose();
-    $<HTMLDialogElement>("release-dialog").close();
-  }, 1000);
+  startAutoClose($("rel-close-hint"), $<HTMLDialogElement>("release-dialog"));
 }
 
 $("btn-create-release").onclick = async () => {
