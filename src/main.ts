@@ -1191,6 +1191,11 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
     link.textContent = entry.note;
     link.onclick = (e) => {
       e.preventDefault();
+      // Opening a release cancels the countdown — the dialog shouldn't vanish mid-read.
+      if (autoCloseTimer !== undefined) {
+        cancelAutoClose();
+        $("train-foot-hint").textContent = "Close to go back to the ledger.";
+      }
       openUrl(entry.url!);
     };
     state.append(link);
@@ -1286,9 +1291,12 @@ async function runTrain() {
   run.textContent = released
     ? `${released} release${released === 1 ? "" : "s"} created`
     : "Nothing released";
-  $("train-foot-hint").textContent = stopped
-    ? "The rest were left alone — fix the failure and run another train."
-    : "Close to go back to the ledger.";
+  if (stopped) {
+    $("train-foot-hint").textContent =
+      "The rest were left alone — fix the failure and run another train.";
+  } else {
+    startAutoClose($("train-foot-hint"), $<HTMLDialogElement>("train-dialog"));
+  }
   renderTrain();
   renderRepos();
   summarize();
@@ -1305,6 +1313,7 @@ $<HTMLDialogElement>("train-dialog").addEventListener("cancel", (e) => {
   if (trainRunning) e.preventDefault();
 });
 $<HTMLDialogElement>("train-dialog").addEventListener("close", () => {
+  cancelAutoClose();
   train = [];
   trainRunning = false;
   trainFinished = false;
