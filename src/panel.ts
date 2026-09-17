@@ -1,16 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { isWaiting } from "./waiting";
 import { DEFAULT_RULES, flagReasons, type RepoRule, type RuleStatus, type Rules } from "./rules";
 
 interface Repo { name: string; full_name: string; owner: { login: string } }
-interface CachedStatus { status: RuleStatus }
-interface Settings { rules: Rules; repo_rules: Record<string, RepoRule> }
+interface PanelStatus extends RuleStatus { release_url?: string | null }
+interface CachedStatus { status: PanelStatus }
+interface PanelSections { pinned: boolean; waiting: boolean; recent: boolean }
+interface Settings { rules: Rules; repo_rules: Record<string, RepoRule>; panel_sections?: PanelSections }
 interface Waiting { repo: Repo; ahead: number; reasons: string[] }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const MAX_ROWS = 5;
+const RECENT_ROWS = 3;
 
 function readCache<T>(key: string): T | null {
   try {
@@ -32,6 +36,12 @@ function since(iso: string | null): string {
 
 function heat(ahead: number): string {
   return ahead >= 20 ? "hot" : "warm";
+}
+
+function ago(iso: string): string {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days < 1) return "today";
+  return days < 30 ? `${days}d ago` : `${Math.floor(days / 30)}mo ago`;
 }
 
 const BELL_SVG =
@@ -79,6 +89,37 @@ function row({ repo, ahead, reasons }: Waiting): HTMLElement {
   return el;
 }
 
+function recentRow(repo: Repo, status: PanelStatus): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "panel-row";
+
+  const name = document.createElement("span");
+  name.className = "panel-name";
+  const owner = document.createElement("span");
+  owner.className = "owner";
+  owner.textContent = `${repo.owner.login} / `;
+  name.append(owner, document.createTextNode(repo.name));
+  name.title = repo.full_name;
+
+  const when = document.createElement("span");
+  when.className = "panel-when";
+  when.textContent = ago(status.published_at!);
+
+  const tag = document.createElement(status.release_url ? "a" : "span");
+  tag.className = "panel-tag";
+  tag.textContent = status.latest_tag ?? "";
+  if (status.release_url) {
+    (tag as HTMLAnchorElement).href = "#";
+    tag.onclick = (e) => {
+      e.preventDefault();
+      openUrl(status.release_url!);
+    };
+  }
+
+  el.append(name, when, tag);
+  return el;
+}
+
 async function render() {
   const demo = await invoke<boolean>("is_demo").catch(() => false);
   const key = (k: string) => (demo ? `demo:${k}` : k);
@@ -108,6 +149,11 @@ async function render() {
     // A tripped rule is the whole point of the panel; the count breaks the tie.
     .sort((a, b) => Number(b.reasons.length > 0) - Number(a.reasons.length > 0) || b.ahead - a.ahead);
 
+  const sections: PanelSections = {
+    pinned: true, waiting: true, recent: true,
+    ...(settings?.panel_sections ?? {}),
+  };
+
   const [pinned, rest] = [
     waiting.filter((x) => pins.has(x.repo.full_name)),
     waiting.filter((x) => !pins.has(x.repo.full_name)),
@@ -120,8 +166,8 @@ async function render() {
   const list = $("panel-list");
   list.innerHTML = "";
 
-  const shownPins = pinned.slice(0, MAX_ROWS);
-  const shownRest = rest.slice(0, MAX_ROWS - shownPins.length);
+  const shownPins = sections.pinned ? pinned.slice(0, MAX_ROWS) : [];
+  const shownRest = sections.waiting ? rest.slice(0, MAX_ROWS - shownPins.length) : [];
   for (const [label, rows] of [["Pinned", shownPins], ["Waiting", shownRest]] as const) {
     if (!rows.length) continue;
     const el = document.createElement("div");
@@ -131,12 +177,30 @@ async function render() {
     for (const entry of rows) list.append(row(entry));
   }
 
-  const hidden = waiting.length - shownPins.length - shownRest.length;
+  // Only enabled sections' overflow counts — a toggled-off section isn't "more".
+  let hidden = 0;
+  if (sections.pinned) hidden += pinned.length - shownPins.length;
+  if (sections.waiting) hidden += rest.length - shownRest.length;
   if (hidden > 0) {
     const more = document.createElement("div");
     more.className = "panel-more";
     more.textContent = `and ${hidden} more`;
     list.append(more);
+  }
+
+  if (sections.recent) {
+    const recent = repos
+      .map((repo) => ({ repo, status: statuses[repo.full_name]?.status }))
+      .filter((x): x is { repo: Repo; status: PanelStatus } => !!x.status?.published_at)
+      .sort((a, b) => b.status.published_at!.localeCompare(a.status.published_at!))
+      .slice(0, RECENT_ROWS);
+    if (recent.length) {
+      const el = document.createElement("div");
+      el.className = "panel-section";
+      el.textContent = "Recently released";
+      list.append(el);
+      for (const entry of recent) list.append(recentRow(entry.repo, entry.status));
+    }
   }
 }
 
