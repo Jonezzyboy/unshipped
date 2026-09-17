@@ -191,6 +191,7 @@ struct RepoStatus {
     release_url: Option<String>,
     published_at: Option<String>,
     ahead_by: u64,
+    breaking: bool,
 }
 
 #[tauri::command]
@@ -206,6 +207,7 @@ async fn repo_status(
             release_url: tag.map(|t| format!("https://github.com/{owner}/{repo}/releases/tag/{t}")),
             published_at: published.map(String::from),
             ahead_by: ahead,
+            breaking: version::has_breaking(&demo::commits(&format!("{owner}/{repo}"))),
         });
     }
     let token = token()?;
@@ -213,11 +215,14 @@ async fn repo_status(
         Some(release) => {
             let cmp =
                 github::compare(&token, &owner, &repo, &release.tag_name, &default_branch).await?;
+            // The compare call already carries the messages; the flag is free.
+            let messages: Vec<String> = cmp.commits.into_iter().map(|c| c.commit.message).collect();
             Ok(RepoStatus {
                 latest_tag: Some(release.tag_name),
                 release_url: Some(release.html_url),
                 published_at: release.published_at,
                 ahead_by: cmp.ahead_by,
+                breaking: version::has_breaking(&messages),
             })
         }
         None => Ok(RepoStatus {
@@ -225,6 +230,7 @@ async fn repo_status(
             release_url: None,
             published_at: None,
             ahead_by: github::branch_commit_count(&token, &owner, &repo, &default_branch).await?,
+            breaking: false,
         }),
     }
 }
@@ -346,6 +352,7 @@ async fn create_release(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             is_demo,
             auth_status,

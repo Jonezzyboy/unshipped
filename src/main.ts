@@ -1,7 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import { isWaiting } from "./waiting";
+import {
+  DEFAULT_RULES,
+  flagReasons,
+  overrideText,
+  type RepoRule,
+  type Rules,
+} from "./rules";
 
 interface User { login: string; avatar_url: string }
 interface AuthStatus { user: User | null; error: string | null }
@@ -21,6 +34,7 @@ interface RepoStatus {
   release_url: string | null;
   published_at: string | null;
   ahead_by: number;
+  breaking?: boolean;
 }
 type BumpLevel = "major" | "minor" | "patch";
 interface Suggestion { level: BumpLevel; reason: string; major: string; minor: string; patch: string }
@@ -57,7 +71,7 @@ const statuses = new Map<string, RepoStatus>();
 let currentLogin = "";
 
 type OwnerFilter = "all" | "mine" | "orgs";
-type StatusFilter = "all" | "unshipped" | "shipped" | "noreleases";
+type StatusFilter = "all" | "unshipped" | "shipped" | "noreleases" | "flagged";
 let ownerFilter: OwnerFilter = "all";
 let statusFilter: StatusFilter = "all";
 
@@ -153,6 +167,7 @@ async function loadRepos() {
     // The panel is a separate window with no state of its own; it reads this.
     localStorage.setItem(cacheKey(CHECKED_KEY), new Date().toISOString());
     emit("ledger-updated");
+    notifyFlagged();
   } catch (e) {
     $("repo-summary").textContent = String(e);
   }
@@ -294,6 +309,7 @@ function matchesStatus(repo: Repo, filter: StatusFilter): boolean {
     case "unshipped": return status.latest_tag !== null && status.ahead_by > 0;
     case "shipped": return status.latest_tag !== null && status.ahead_by === 0;
     case "noreleases": return status.latest_tag === null;
+    case "flagged": return flagsFor(repo).length > 0;
   }
 }
 
@@ -310,6 +326,23 @@ function togglePin(repo: Repo) {
   // A pin can put an unreleased repo in the menu bar, or take one out of it.
   syncMenuBar();
   emit("ledger-updated");
+}
+
+// --- Shipping rules ---
+
+let rules: Rules = { ...DEFAULT_RULES };
+let repoRules: Record<string, RepoRule> = {};
+
+function flagsFor(repo: Repo): string[] {
+  return flagReasons(statuses.get(repo.full_name), {
+    rules,
+    override: repoRules[repo.full_name],
+    pinned: pinnedSet.has(repo.full_name),
+  });
+}
+
+function flaggedRepos(): Repo[] {
+  return allRepos.filter((r) => flagsFor(r).length > 0);
 }
 
 function pinnedRepos(): Repo[] {
@@ -403,6 +436,7 @@ function renderFilters() {
   const statusDefs: [StatusFilter, string][] = [
     ["all", "All"],
     ["unshipped", "Unshipped"],
+    ["flagged", "Flagged"],
     ["shipped", "Shipped"],
     ["noreleases", "No releases"],
   ];
@@ -435,6 +469,7 @@ function resetAndRender() {
 function buildRow(repo: Repo): HTMLElement {
   const li = document.createElement("li");
   li.className = "repo-row";
+  if (flagsFor(repo).length) li.dataset.flagged = "";
   li.append(
     rowSelect(repo),
     rowName(repo),
@@ -576,6 +611,10 @@ const PIN_SVG =
   '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">' +
   '<path d="M4.456.734a1.75 1.75 0 0 1 2.826.504l.613 1.327a3.08 3.08 0 0 0 2.084 1.707l2.454.584c1.332.317 1.8 1.972.832 2.94L11.06 10l3.72 3.72a.75.75 0 1 1-1.061 1.06L10 11.06l-2.204 2.205c-.968.968-2.623.5-2.94-.832l-.584-2.454a3.08 3.08 0 0 0-1.707-2.084l-1.327-.613a1.75 1.75 0 0 1-.504-2.826L4.456.734Z"/></svg>';
 
+const BELL_SVG =
+  '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">' +
+  '<path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Z"/></svg>';
+
 function rowActions(repo: Repo): HTMLElement {
   const el = document.createElement("span");
   el.className = "actions";
@@ -588,6 +627,15 @@ function rowActions(repo: Repo): HTMLElement {
     el.append(btn);
   }
 
+  const reasons = flagsFor(repo);
+  const flag = document.createElement("button");
+  flag.className = "flag";
+  flag.innerHTML = BELL_SVG;
+  flag.title = reasons.length ? `Flagged — ${reasons.join(" · ")}` : "Rules for this repo…";
+  flag.setAttribute("aria-pressed", String(reasons.length > 0));
+  flag.onclick = () => openRepoRules(repo);
+  el.append(flag);
+
   const isPinned = pinnedSet.has(repo.full_name);
   const pin = document.createElement("button");
   pin.className = "pin";
@@ -598,6 +646,69 @@ function rowActions(repo: Repo): HTMLElement {
   el.append(pin);
   return el;
 }
+
+// --- Per-repo rules dialog ---
+
+let ruleRepo: Repo | null = null;
+
+function ruleMode(): string {
+  return (
+    document.querySelector<HTMLInputElement>('input[name="repo-rule-mode"]:checked')?.value ??
+    "global"
+  );
+}
+
+function syncRuleMode() {
+  $("repo-rule-custom").hidden = ruleMode() !== "custom";
+}
+
+function openRepoRules(repo: Repo) {
+  ruleRepo = repo;
+  const existing = repoRules[repo.full_name];
+  const reasons = flagsFor(repo);
+
+  $("repo-rule-title").textContent = repo.full_name;
+  $("repo-rule-state").textContent = reasons.length
+    ? `Flagged now — ${reasons.join(" · ")}.`
+    : "Not flagged at the moment.";
+
+  const mode = existing?.muted ? "muted" : existing ? "custom" : "global";
+  for (const input of document.querySelectorAll<HTMLInputElement>('input[name="repo-rule-mode"]')) {
+    input.checked = input.value === mode;
+  }
+  $<HTMLInputElement>("repo-rule-commits").value = String(existing?.commits ?? rules.commits);
+  $<HTMLInputElement>("repo-rule-days").value = String(existing?.days ?? rules.days);
+  syncRuleMode();
+  $<HTMLDialogElement>("rules-dialog").showModal();
+}
+
+function clampRule(id: string, fallback: number): number {
+  const value = Number($<HTMLInputElement>(id).value);
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback;
+}
+
+$("btn-repo-rule-save").onclick = () => {
+  if (!ruleRepo) return;
+  const mode = ruleMode();
+  if (mode === "global") delete repoRules[ruleRepo.full_name];
+  else if (mode === "muted") repoRules[ruleRepo.full_name] = { muted: true, commits: null, days: null };
+  else {
+    repoRules[ruleRepo.full_name] = {
+      muted: false,
+      commits: clampRule("repo-rule-commits", rules.commits),
+      days: clampRule("repo-rule-days", rules.days),
+    };
+  }
+  $<HTMLDialogElement>("rules-dialog").close();
+  saveRules();
+};
+
+for (const input of document.querySelectorAll<HTMLInputElement>('input[name="repo-rule-mode"]')) {
+  input.onchange = syncRuleMode;
+}
+$<HTMLDialogElement>("rules-dialog").addEventListener("close", () => {
+  ruleRepo = null;
+});
 
 // --- Release dialog ---
 
@@ -1230,6 +1341,8 @@ interface Settings {
   argo_iap_service_account: string;
   theme: string;
   menu_bar: boolean;
+  rules: Rules;
+  repo_rules: Record<string, RepoRule>;
 }
 interface Unlinked { name: string; repo_urls: string[] }
 interface AppReport {
@@ -1272,7 +1385,147 @@ function currentSettings(): Settings {
     argo_iap_service_account: iap ? $<HTMLInputElement>("argo-iap-sa").value.trim() : "",
     theme: currentTheme,
     menu_bar: menuBarOn,
+    rules,
+    repo_rules: repoRules,
   };
+}
+
+// --- Shipping rules: settings panel ---
+
+function saveRules() {
+  invoke("save_settings", { new: currentSettings() }).catch(() => {});
+  renderRepos();
+  syncMenuBar();
+  emit("ledger-updated");
+  if (!$("panel-rules").hidden) renderRulesPanel();
+}
+
+function renderOverrides() {
+  const list = $("rule-overrides");
+  list.innerHTML = "";
+  const entries = Object.entries(repoRules).sort(([a], [b]) => a.localeCompare(b));
+  list.hidden = entries.length === 0;
+  $("rule-overrides-note").textContent = entries.length
+    ? "Set one from the bell on any row in the ledger."
+    : "None yet — set one from the bell on any row in the ledger.";
+
+  for (const [full, rule] of entries) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "override-name";
+    name.textContent = full;
+    const value = document.createElement("span");
+    value.className = "override-value mono";
+    value.textContent = overrideText(rule);
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "ghost";
+    drop.textContent = "Remove";
+    drop.onclick = () => {
+      delete repoRules[full];
+      saveRules();
+    };
+    li.append(name, value, drop);
+    list.append(li);
+  }
+}
+
+function renderRulesPanel() {
+  $<HTMLInputElement>("rule-commits-on").checked = rules.commits_enabled;
+  $<HTMLInputElement>("rule-commits").value = String(rules.commits);
+  $<HTMLInputElement>("rule-commits").disabled = !rules.commits_enabled;
+  $<HTMLInputElement>("rule-days-on").checked = rules.days_enabled;
+  $<HTMLInputElement>("rule-days").value = String(rules.days);
+  $<HTMLInputElement>("rule-days").disabled = !rules.days_enabled;
+  $<HTMLInputElement>("rule-breaking").checked = rules.breaking;
+  $<HTMLInputElement>("rule-notify").checked = rules.notify;
+  $<HTMLInputElement>("rule-pinned-only").checked = rules.pinned_only;
+
+  const flagged = flaggedRepos().length;
+  $("rule-pinned-note").textContent = allRepos.length
+    ? `${pinnedSet.size} of ${allRepos.length} repos are pinned. ${flagged} flagged right now.`
+    : "";
+  renderOverrides();
+}
+
+function wireRule(id: string, apply: (on: boolean) => void) {
+  $<HTMLInputElement>(id).onchange = (e) => {
+    apply((e.target as HTMLInputElement).checked);
+    saveRules();
+  };
+}
+
+function wireThreshold(id: string, apply: (value: number) => void, fallback: () => number) {
+  $<HTMLInputElement>(id).onchange = () => {
+    apply(clampRule(id, fallback()));
+    saveRules();
+  };
+}
+
+wireRule("rule-commits-on", (on) => {
+  rules.commits_enabled = on;
+});
+wireRule("rule-days-on", (on) => {
+  rules.days_enabled = on;
+});
+wireRule("rule-breaking", (on) => {
+  rules.breaking = on;
+});
+wireRule("rule-pinned-only", (on) => {
+  rules.pinned_only = on;
+});
+wireThreshold("rule-commits", (v) => {
+  rules.commits = v;
+}, () => DEFAULT_RULES.commits);
+wireThreshold("rule-days", (v) => {
+  rules.days = v;
+}, () => DEFAULT_RULES.days);
+
+$<HTMLInputElement>("rule-notify").onchange = async (e) => {
+  const box = e.target as HTMLInputElement;
+  if (box.checked && !(await isPermissionGranted().catch(() => false))) {
+    const granted = await requestPermission().catch(() => "denied");
+    if (granted !== "granted") {
+      box.checked = false;
+      $("rule-notify-note").textContent =
+        "macOS is not letting unshipped send notifications — turn them on in System Settings → Notifications.";
+      return;
+    }
+  }
+  rules.notify = box.checked;
+  saveRules();
+};
+
+// --- Shipping rules: notifications ---
+
+const NOTIFIED_KEY = "unshipped:notified:v1";
+const DAY_MS = 86_400_000;
+
+async function notifyFlagged() {
+  if (!rules.notify) return;
+  // The ledger is the notification when the window is there to read.
+  if (await getCurrentWindow().isVisible().catch(() => true)) return;
+  if (!(await isPermissionGranted().catch(() => false))) return;
+
+  const sent = readCache<Record<string, number>>(cacheKey(NOTIFIED_KEY)) ?? {};
+  const now = Date.now();
+  const due = flaggedRepos().filter((r) => now - (sent[r.full_name] ?? 0) >= DAY_MS);
+  if (!due.length) return;
+
+  if (due.length <= 2) {
+    for (const repo of due) {
+      sendNotification({ title: repo.full_name, body: flagsFor(repo).join(" · ") });
+    }
+  } else {
+    const names = due.slice(0, 4).map((r) => r.name).join(", ");
+    sendNotification({
+      title: `${due.length} repos have tripped a rule`,
+      body: due.length > 4 ? `${names} and ${due.length - 4} more` : names,
+    });
+  }
+
+  for (const repo of due) sent[repo.full_name] = now;
+  localStorage.setItem(cacheKey(NOTIFIED_KEY), JSON.stringify(sent));
 }
 
 // --- The three setup steps ---
@@ -1426,6 +1679,7 @@ async function openSettings() {
   $<HTMLInputElement>("argo-iap-sa").value = s.argo_iap_service_account;
   $("iap-fields").hidden = !s.argo_iap_client_id;
   $<HTMLInputElement>("menu-bar-toggle").checked = s.menu_bar;
+  renderRulesPanel();
   renderThemeOptions();
 
   renderCheck(await invoke<ArgoCheck>("argo_check"));
@@ -1539,7 +1793,10 @@ applyTheme(currentTheme);
 // settings.json is the source of truth; the localStorage copy only avoids a flash at boot.
 invoke<Settings>("get_settings").then((s) => {
   if (s.theme !== currentTheme) applyTheme(s.theme);
+  rules = { ...DEFAULT_RULES, ...s.rules };
+  repoRules = s.repo_rules ?? {};
   setMenuBar(s.menu_bar);
+  if (allRepos.length) renderRepos();
 });
 (async () => {
   demoMode = await invoke<boolean>("is_demo").catch(() => false);

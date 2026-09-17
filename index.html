@@ -92,6 +92,7 @@
           <nav class="settings-nav" aria-label="Settings sections">
             <button type="button" data-section="appearance">Appearance</button>
             <button type="button" data-section="menubar">Menu bar</button>
+            <button type="button" data-section="rules">Shipping rules</button>
             <button type="button" data-section="integrations">Integrations</button>
             <button type="button" data-section="about">About</button>
           </nav>
@@ -120,6 +121,57 @@
                 <li>The list refreshes itself every 15 minutes.</li>
                 <li>Picking a repo opens its release dialog.</li>
               </ul>
+            </section>
+
+            <section id="panel-rules" class="settings-panel" hidden>
+              <h3>Shipping rules</h3>
+              <p class="hint">
+                A repo with commits waiting that crosses one of these lines is flagged in the ledger
+                and called out in the menu bar.
+              </p>
+
+              <div class="rule-line">
+                <label class="check">
+                  <input type="checkbox" id="rule-commits-on" />
+                  Flag a repo once
+                </label>
+                <input type="number" id="rule-commits" class="num mono" min="1" max="999" />
+                <span class="rule-tail">commits are waiting</span>
+              </div>
+
+              <div class="rule-line">
+                <label class="check">
+                  <input type="checkbox" id="rule-days-on" />
+                  or nothing has been released for
+                </label>
+                <input type="number" id="rule-days" class="num mono" min="1" max="999" />
+                <span class="rule-tail">days</span>
+              </div>
+
+              <div class="rule-line">
+                <label class="check">
+                  <input type="checkbox" id="rule-breaking" />
+                  or a waiting commit is a breaking change
+                </label>
+              </div>
+
+              <label class="check setting">
+                <input type="checkbox" id="rule-notify" />
+                Notify me when a repo trips a rule
+              </label>
+              <p class="hint setting-note" id="rule-notify-note">
+                Once per repo per day, and never while the window is open.
+              </p>
+
+              <label class="check setting">
+                <input type="checkbox" id="rule-pinned-only" />
+                Only flag pinned repos
+              </label>
+              <p class="hint setting-note" id="rule-pinned-note"></p>
+
+              <div class="facts-head">Per-repo overrides</div>
+              <ul id="rule-overrides" class="overrides"></ul>
+              <p class="hint" id="rule-overrides-note"></p>
             </section>
 
             <section id="panel-integrations" class="settings-panel" hidden>
@@ -275,6 +327,43 @@
             <span id="train-foot-hint" class="hint">Stops on the first failure — nothing after it is tagged.</span>
           </footer>
         </div>
+      </form>
+    </dialog>
+
+    <!-- Per-repo rules -->
+    <dialog id="rules-dialog">
+      <form method="dialog" class="release">
+        <header class="release-head">
+          <h2 id="repo-rule-title" class="mono"></h2>
+          <button value="close" class="ghost" type="submit">Close</button>
+        </header>
+        <p id="repo-rule-state" class="hint"></p>
+        <div class="rule-modes" role="radiogroup" aria-label="Rules for this repo">
+          <label class="check">
+            <input type="radio" name="repo-rule-mode" value="global" />
+            Use the rules in Settings
+          </label>
+          <label class="check">
+            <input type="radio" name="repo-rule-mode" value="custom" />
+            Flag this repo on its own thresholds
+          </label>
+          <div id="repo-rule-custom" class="rule-custom">
+            <div class="rule-line">
+              <span class="rule-tail">Flag once</span>
+              <input type="number" id="repo-rule-commits" class="num mono" min="1" max="999" />
+              <span class="rule-tail">commits are waiting, or nothing released for</span>
+              <input type="number" id="repo-rule-days" class="num mono" min="1" max="999" />
+              <span class="rule-tail">days.</span>
+            </div>
+          </div>
+          <label class="check">
+            <input type="radio" name="repo-rule-mode" value="muted" />
+            Never flag this repo
+          </label>
+        </div>
+        <footer class="release-foot">
+          <button type="button" id="btn-repo-rule-save" class="primary">Save</button>
+        </footer>
       </form>
     </dialog>
 

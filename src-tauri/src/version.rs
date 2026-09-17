@@ -48,6 +48,13 @@ pub fn suggest(current_tag: Option<&str>, messages: &[String]) -> Suggestion {
     }
 }
 
+/// Whether any of these commits carries a breaking-change marker.
+pub fn has_breaking(messages: &[String]) -> bool {
+    messages
+        .iter()
+        .any(|m| is_breaking(m, m.lines().next().unwrap_or("")))
+}
+
 fn parse_tag(tag: Option<&str>) -> (String, Version) {
     let Some(tag) = tag else {
         return ("v".into(), Version::new(0, 0, 0));
@@ -128,6 +135,13 @@ mod tests {
     fn no_previous_release_starts_at_zero() {
         let s = suggest(None, &msgs(&["feat: initial"]));
         assert_eq!(s.minor, "v0.1.0");
+    }
+
+    #[test]
+    fn has_breaking_spots_bang_and_footer() {
+        assert!(has_breaking(&msgs(&["fix: x", "feat!: drop v1"])));
+        assert!(has_breaking(&msgs(&["refactor: rework\n\nBREAKING CHANGE: renamed"])));
+        assert!(!has_breaking(&msgs(&["fix: x", "feat: y"])));
     }
 
     #[test]

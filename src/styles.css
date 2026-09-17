@@ -13,7 +13,7 @@
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   /* Shared by header and rows — the actions column is fixed so every row's
      fr tracks resolve identically whether or not the row has a button. */
-  --ledger-cols: 1.1rem minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem minmax(8rem, 1fr) 10rem;
+  --ledger-cols: 1.1rem minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem minmax(8rem, 1fr) 12.5rem;
 
   color-scheme: dark;
   font-family: -apple-system, "Avenir Next", system-ui, sans-serif;
@@ -346,9 +346,9 @@ a:hover { text-decoration: underline; }
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.6rem;
 }
-.repo-row .actions button { font-size: 0.82rem; padding: 0.3em 0.8em; }
+.repo-row .actions button { font-size: 0.82rem; padding: 0.3em 0.8em; white-space: nowrap; }
 .repo-row .actions .pin {
   background: none;
   border: none;
@@ -565,6 +565,78 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   color: var(--muted);
   font-size: 0.82rem;
 }
+/* --- Shipping rules --- */
+.repo-row[data-flagged] { background: color-mix(in srgb, var(--lamp) 5%, transparent); }
+.repo-row[data-flagged]:hover { background: color-mix(in srgb, var(--lamp) 10%, transparent); }
+.repo-row .actions .flag {
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  padding: 0.25em 0.35em;
+  color: var(--muted);
+  opacity: 0;
+}
+.repo-row:hover .actions .flag,
+.repo-row .actions .flag:focus-visible { opacity: 0.7; }
+.repo-row .actions .flag:hover { opacity: 1; color: var(--text); }
+.repo-row .actions .flag[aria-pressed="true"] { opacity: 1; color: var(--lamp); }
+
+.rule-line { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.7rem 0; }
+.rule-line .check { margin: 0; }
+.rule-tail { color: var(--muted); font-size: 0.85rem; }
+input.num { width: 3.6rem; text-align: center; padding: 0.2em 0.4em; }
+input.num:disabled { color: var(--muted); opacity: 0.6; }
+
+/* The base input rule is for text fields; a native radio half-inherits it. */
+.check input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+}
+.check input[type="radio"]:checked { border-color: var(--lamp); }
+.check input[type="radio"]:checked::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lamp);
+}
+
+.overrides {
+  list-style: none;
+  margin: 0.5rem 0 0.6rem;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.overrides li {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.5rem 0.45rem 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+.overrides li:first-child { border-top: none; }
+.override-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.override-value { margin-left: auto; color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
+.overrides button { font-size: 0.78rem; padding: 0.2em 0.6em; }
+
+.rule-modes { display: flex; flex-direction: column; margin: 0.6rem 0 0.2rem; }
+.rule-modes .check { color: var(--text); font-size: 0.92rem; margin: 0.4rem 0; }
+.rule-custom { padding-left: 1.5rem; }
+.rule-custom .rule-line { margin: 0.2rem 0 0.5rem; }
+
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
 .or-rule { margin: 1rem 0 0.4rem; }
 .token-row { display: flex; gap: 0.6rem; }
@@ -655,7 +727,7 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 .release-foot { display: flex; align-items: center; gap: 1rem; margin-top: 0.4rem; }
 
 body[data-argo="off"] {
-  --ledger-cols: 1.1rem minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem 10rem;
+  --ledger-cols: 1.1rem minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem 12.5rem;
 }
 body[data-argo="off"] .deploy,
 body[data-argo="off"] .ledger-head [data-sort="deployed"] { display: none; }
@@ -855,6 +927,7 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
   white-space: nowrap;
 }
 .panel-name .owner { color: var(--muted); }
+.panel-row .flag-mark { display: grid; place-items: center; color: var(--lamp); flex-shrink: 0; }
 .panel-row .lamp { font-size: 0.78rem; padding: 0.1em 0.6em; }
 .panel-row button { font-size: 0.78rem; padding: 0.2em 0.6em; }
 .panel-more { padding: 0.2rem 0.9rem 0.5rem; color: var(--muted); font-size: 0.78rem; }
