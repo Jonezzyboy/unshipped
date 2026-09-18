@@ -697,6 +697,57 @@ input.num:disabled { color: var(--muted); opacity: 0.6; }
 .override-value { margin-left: auto; color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
 .overrides button { font-size: 0.78rem; padding: 0.2em 0.6em; }
 
+.shortcut-rows {
+  list-style: none;
+  margin: 0.5rem 0 0.6rem;
+  padding: 0;
+  max-width: 26rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.shortcut-rows li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  padding: 0.45rem 0.5rem 0.45rem 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+.shortcut-rows li:first-child { border-top: none; }
+.shortcut-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.3em 0.45em;
+  min-width: 4.6rem;
+  justify-content: flex-end;
+}
+.shortcut-btn:hover { border-color: var(--muted); }
+.shortcut-btn kbd {
+  font-family: var(--mono);
+  font-size: 1rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  min-width: 2em;
+  height: 2em;
+  padding: 0 0.4em;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.shortcut-btn[data-recording] {
+  color: var(--lamp);
+  border-color: var(--lamp);
+  font-size: 0.85rem;
+}
+
 .rule-modes { display: flex; flex-direction: column; margin: 0.6rem 0 0.2rem; }
 .rule-modes .check { color: var(--text); font-size: 0.92rem; margin: 0.4rem 0; }
 .rule-custom { padding-left: 1.5rem; }

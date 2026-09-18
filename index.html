@@ -94,6 +94,7 @@
             <button type="button" data-section="ledger">Ledger</button>
             <button type="button" data-section="menubar">Menu bar</button>
             <button type="button" data-section="rules">Shipping rules</button>
+            <button type="button" data-section="shortcuts">Shortcuts</button>
             <button type="button" data-section="integrations">Integrations</button>
             <button type="button" data-section="about">About</button>
           </nav>
@@ -212,6 +213,16 @@
               <div class="facts-head">Per-repo overrides</div>
               <ul id="rule-overrides" class="overrides"></ul>
               <p class="hint" id="rule-overrides-note"></p>
+            </section>
+
+            <section id="panel-shortcuts" class="settings-panel" hidden>
+              <h3>Keyboard shortcuts</h3>
+              <p class="hint">
+                Click a shortcut to record a new one — Escape cancels, Delete restores the
+                default.
+              </p>
+              <ul id="shortcut-rows" class="shortcut-rows"></ul>
+              <p class="hint setting-note" id="shortcut-note"></p>
             </section>
 
             <section id="panel-integrations" class="settings-panel" hidden>
