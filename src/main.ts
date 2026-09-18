@@ -139,7 +139,18 @@ function seedFromCache(repos: Repo[]): Repo[] {
   return stale;
 }
 
+let refreshing = false;
+
+function setRefreshing(on: boolean) {
+  refreshing = on;
+  const btn = $<HTMLButtonElement>("btn-refresh");
+  btn.toggleAttribute("data-busy", on);
+  btn.disabled = on;
+}
+
 async function loadRepos() {
+  if (refreshing) return;
+  setRefreshing(true);
   statuses.clear();
 
   // Paint instantly from the last run's repo list while the fresh one loads.
@@ -171,6 +182,8 @@ async function loadRepos() {
     notifyFlagged();
   } catch (e) {
     $("repo-summary").textContent = String(e);
+  } finally {
+    setRefreshing(false);
   }
 }
 
@@ -192,6 +205,8 @@ function summarize() {
 
 async function fetchStatuses(repos: Repo[]) {
   const queue = [...repos];
+  const total = repos.length;
+  let checked = 0;
   const workers = Array.from({ length: 6 }, async () => {
     for (let repo = queue.shift(); repo; repo = queue.shift()) {
       try {
@@ -204,6 +219,11 @@ async function fetchStatuses(repos: Repo[]) {
       } catch {
         // Not cached — errors get retried next launch.
         statuses.set(repo.full_name, { latest_tag: null, release_url: null, published_at: null, ahead_by: -1 });
+      }
+      checked += 1;
+      // Section back-fills also land here; only a full refresh narrates progress.
+      if (refreshing && total >= 5) {
+        $("repo-summary").textContent = `Checking ${checked} of ${total} repos…`;
       }
       scheduleRender();
     }

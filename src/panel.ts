@@ -212,11 +212,13 @@ $("panel-open").onclick = () => invoke("focus_main");
 $("panel-quit").onclick = () => invoke("quit_app");
 $("panel-refresh").onclick = () => {
   invoke("panel_refresh");
+  $("panel-refresh").toggleAttribute("data-busy", true);
   $("panel-checked").textContent = "checking…";
 };
 
 async function refresh() {
   await render();
+  $("panel-refresh").removeAttribute("data-busy");
   fit();
 }
 
