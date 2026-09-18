@@ -1,8 +1,8 @@
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder, Wry,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, Wry,
 };
 
 const TRAY_ID: &str = "menu-bar";
@@ -135,24 +135,47 @@ pub fn hide_panel(app: &AppHandle) {
     highlight(app, false);
 }
 
+/// The monitor whose bounds contain the clicked tray icon. The panel's own
+/// monitor is wherever it was last shown, which is the wrong one to position
+/// against when the click came from another display.
+fn monitor_containing(app: &AppHandle, rect: &tauri::Rect) -> Option<Monitor> {
+    app.available_monitors().ok()?.into_iter().find(|m| {
+        let s = m.scale_factor();
+        let p = rect.position.to_logical::<f64>(s);
+        let pos = m.position().to_logical::<f64>(s);
+        let size = m.size().to_logical::<f64>(s);
+        p.x >= pos.x && p.x < pos.x + size.width && p.y >= pos.y && p.y < pos.y + size.height
+    })
+}
+
 fn show_panel(app: &AppHandle, rect: tauri::Rect) -> Result<(), String> {
     let panel = panel(app)?;
-    let scale = panel.scale_factor().unwrap_or(1.0);
-    let icon = rect.position.to_physical::<f64>(scale);
-    let icon_size = rect.size.to_physical::<f64>(scale);
-    let size = panel.outer_size().map_err(|e| e.to_string())?;
+    let monitor = monitor_containing(app, &rect)
+        .or_else(|| panel.current_monitor().ok().flatten());
 
-    let mut x = icon.x + icon_size.width / 2.0 - size.width as f64 / 2.0;
+    // Everything in logical units: physical spaces disagree between monitors
+    // with different scales, which is what dragged the panel to the wrong one.
+    let scale = monitor.as_ref().map(|m| m.scale_factor()).unwrap_or(1.0);
+    let icon = rect.position.to_logical::<f64>(scale);
+    let icon_size = rect.size.to_logical::<f64>(scale);
+    let panel_scale = panel.scale_factor().unwrap_or(scale);
+    let size = panel
+        .outer_size()
+        .map_err(|e| e.to_string())?
+        .to_logical::<f64>(panel_scale);
+
+    let mut x = icon.x + icon_size.width / 2.0 - size.width / 2.0;
     // Keep it on screen when the item sits at the right end of the bar.
-    if let Ok(Some(monitor)) = panel.current_monitor() {
-        let right = monitor.position().x as f64 + monitor.size().width as f64;
-        x = x.min(right - size.width as f64 - 8.0 * scale);
-        x = x.max(monitor.position().x as f64 + 8.0 * scale);
+    if let Some(m) = &monitor {
+        let pos = m.position().to_logical::<f64>(m.scale_factor());
+        let width = m.size().to_logical::<f64>(m.scale_factor()).width;
+        x = x.min(pos.x + width - size.width - 8.0);
+        x = x.max(pos.x + 8.0);
     }
-    let y = icon.y + icon_size.height + PANEL_GAP * scale;
+    let y = icon.y + icon_size.height + PANEL_GAP;
 
     panel
-        .set_position(PhysicalPosition::new(x, y))
+        .set_position(LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
     panel.show().map_err(|e| e.to_string())?;
     panel.set_focus().map_err(|e| e.to_string())?;
