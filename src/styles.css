@@ -827,9 +827,12 @@ body[data-argo="off"] .ledger-head [data-sort="deployed"] { display: none; }
   .topbar { flex-wrap: wrap; }
 }
 
+.icon-btn[data-busy] { color: var(--lamp); }
 @media (prefers-reduced-motion: no-preference) {
   .lamp[data-heat="loading"] { animation: pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.45; } }
+  .icon-btn[data-busy] svg { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 }
 
 /* --- Selection and the release train --- */
