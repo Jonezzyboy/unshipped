@@ -1462,6 +1462,7 @@ interface Settings {
   menu_bar: boolean;
   hide_shipped: boolean;
   hide_no_releases: boolean;
+  shortcuts: Record<string, string>;
   panel_sections: PanelSections;
   rules: Rules;
   repo_rules: Record<string, RepoRule>;
@@ -1511,6 +1512,7 @@ function currentSettings(): Settings {
     menu_bar: menuBarOn,
     hide_shipped: hideShipped,
     hide_no_releases: hideNoReleases,
+    shortcuts: shortcutOverrides,
     panel_sections: panelSections,
     rules,
     repo_rules: repoRules,
@@ -1820,6 +1822,8 @@ async function openSettings() {
   $<HTMLInputElement>("panel-sec-pinned").checked = panelSections.pinned;
   $<HTMLInputElement>("panel-sec-waiting").checked = panelSections.waiting;
   $<HTMLInputElement>("panel-sec-recent").checked = panelSections.recent;
+  recordingFor = null;
+  renderShortcutRows();
   renderRulesPanel();
   renderThemeOptions();
 
@@ -1916,6 +1920,147 @@ document.addEventListener("keydown", (e) => {
   if (!$("view-settings").hidden) closeSettings();
 });
 
+// --- Keyboard shortcuts ---
+
+interface ShortcutDef { id: string; label: string; combo: string; run: () => void }
+
+const SHORTCUTS: ShortcutDef[] = [
+  { id: "refresh", label: "Refresh repos", combo: "Cmd+R", run: () => loadRepos() },
+  { id: "search", label: "Focus the filter", combo: "Cmd+F", run: () => $<HTMLInputElement>("search").select() },
+  { id: "train", label: "Open the release train", combo: "Cmd+T", run: () => { if (selected.size) openTrain(); } },
+  { id: "clear-selection", label: "Clear selected repos", combo: "Cmd+Shift+K", run: () => { selected.clear(); renderRepos(); } },
+  {
+    id: "settings", label: "Open or close settings", combo: "Cmd+,",
+    run: () => ($("view-settings").hidden ? openSettings() : closeSettings()),
+  },
+];
+
+let shortcutOverrides: Record<string, string> = {};
+let recordingFor: string | null = null;
+
+const effectiveCombo = (def: ShortcutDef) => shortcutOverrides[def.id] ?? def.combo;
+
+// e.key shifts with modifiers ("," becomes "<"), so combos are built from e.code.
+function keyName(e: KeyboardEvent): string | null {
+  const c = e.code;
+  if (/^(Meta|Control|Alt|Shift)(Left|Right)$/.test(c)) return null;
+  if (c.startsWith("Key")) return c.slice(3);
+  if (c.startsWith("Digit")) return c.slice(5);
+  const named: Record<string, string> = {
+    Comma: ",", Period: ".", Slash: "/", Backslash: "\\", BracketLeft: "[",
+    BracketRight: "]", Semicolon: ";", Quote: "'", Backquote: "`", Minus: "-", Equal: "=",
+  };
+  return named[c] ?? c;
+}
+
+function comboFromEvent(e: KeyboardEvent): string | null {
+  const key = keyName(e);
+  if (!key) return null;
+  return [
+    e.metaKey ? "Cmd" : "",
+    e.ctrlKey ? "Ctrl" : "",
+    e.altKey ? "Alt" : "",
+    e.shiftKey ? "Shift" : "",
+    key,
+  ].filter(Boolean).join("+");
+}
+
+const KEY_SYMBOLS: Record<string, string> = { Cmd: "⌘", Ctrl: "⌃", Alt: "⌥", Shift: "⇧" };
+const comboKeys = (combo: string) => combo.split("+").map((p) => KEY_SYMBOLS[p] ?? p);
+const prettyCombo = (combo: string) => comboKeys(combo).join("");
+
+function syncShortcutHints() {
+  const refresh = SHORTCUTS.find((d) => d.id === "refresh")!;
+  const btn = $("btn-refresh");
+  btn.title = `Refresh repos (${prettyCombo(effectiveCombo(refresh))})`;
+  btn.setAttribute("aria-label", btn.title);
+}
+
+function renderShortcutRows() {
+  const list = $("shortcut-rows");
+  list.innerHTML = "";
+  for (const def of SHORTCUTS) {
+    const li = document.createElement("li");
+    const label = document.createElement("span");
+    label.textContent = def.label;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "shortcut-btn";
+    if (recordingFor === def.id) {
+      btn.textContent = "Press keys…";
+      btn.setAttribute("data-recording", "");
+    } else {
+      for (const key of comboKeys(effectiveCombo(def))) {
+        const cap = document.createElement("kbd");
+        cap.textContent = key;
+        btn.append(cap);
+      }
+      if (shortcutOverrides[def.id]) btn.title = `Default: ${prettyCombo(def.combo)}`;
+    }
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      recordingFor = recordingFor === def.id ? null : def.id;
+      $("shortcut-note").textContent = "";
+      renderShortcutRows();
+    };
+    li.append(label, btn);
+    list.append(li);
+  }
+}
+
+function finishRecording() {
+  recordingFor = null;
+  $("shortcut-note").textContent = "";
+  saveSettings();
+  renderShortcutRows();
+  syncShortcutHints();
+}
+
+// Capture phase, so a recorded Escape never reaches the settings-closing handler.
+document.addEventListener("keydown", (e) => {
+  if (!recordingFor) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const def = SHORTCUTS.find((d) => d.id === recordingFor)!;
+  if (e.key === "Escape") {
+    recordingFor = null;
+    $("shortcut-note").textContent = "";
+    renderShortcutRows();
+    return;
+  }
+  if (e.key === "Backspace" || e.key === "Delete") {
+    delete shortcutOverrides[def.id];
+    finishRecording();
+    return;
+  }
+  const combo = comboFromEvent(e);
+  if (!combo) return;
+  const clash = SHORTCUTS.find((d) => d.id !== def.id && effectiveCombo(d) === combo);
+  if (clash) {
+    $("shortcut-note").textContent = `${prettyCombo(combo)} already runs “${clash.label}” — still recording.`;
+    return;
+  }
+  if (combo === def.combo) delete shortcutOverrides[def.id];
+  else shortcutOverrides[def.id] = combo;
+  finishRecording();
+}, true);
+
+document.addEventListener("keydown", (e) => {
+  if (recordingFor) return;
+  if (!$("view-login").hidden) return;
+  // A dialog owns the keyboard — refreshing under a running train would be chaos.
+  if (document.querySelector("dialog[open]")) return;
+  const combo = comboFromEvent(e);
+  if (!combo) return;
+  const def = SHORTCUTS.find((d) => effectiveCombo(d) === combo);
+  if (!def) return;
+  const t = e.target;
+  const typing = t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
+  if (typing && !e.metaKey && !e.ctrlKey) return;
+  e.preventDefault();
+  def.run();
+});
+
 $("btn-refresh").onclick = loadRepos;
 function syncSearchClear() {
   $("btn-search-clear").hidden = $<HTMLInputElement>("search").value.length === 0;
@@ -1959,6 +2104,8 @@ invoke<Settings>("get_settings").then((s) => {
   panelSections = { ...panelSections, ...s.panel_sections };
   hideShipped = s.hide_shipped;
   hideNoReleases = s.hide_no_releases;
+  shortcutOverrides = s.shortcuts ?? {};
+  syncShortcutHints();
   setMenuBar(s.menu_bar);
   if (allRepos.length) renderRepos();
 });

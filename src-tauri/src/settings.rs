@@ -26,6 +26,9 @@ pub struct Settings {
     pub hide_shipped: bool,
     #[serde(default)]
     pub hide_no_releases: bool,
+    /// Overrides only, keyed by action id; an absent action uses its default combo.
+    #[serde(default)]
+    pub shortcuts: BTreeMap<String, String>,
     #[serde(default)]
     pub panel_sections: PanelSections,
     #[serde(default)]
@@ -124,6 +127,7 @@ impl Default for Settings {
             menu_bar: false,
             hide_shipped: false,
             hide_no_releases: false,
+            shortcuts: BTreeMap::new(),
             panel_sections: PanelSections::default(),
             rules: Rules::default(),
             repo_rules: BTreeMap::new(),
