@@ -1420,7 +1420,7 @@ function renderThemeOptions() {
     btn.onclick = () => {
       applyTheme(theme.id);
       renderThemeOptions();
-      invoke("save_settings", { new: currentSettings() });
+      saveSettings();
     };
     wrap.append(btn);
   }
@@ -1497,10 +1497,19 @@ function currentSettings(): Settings {
   };
 }
 
+// Saves are chained: two quick toggles fired concurrently can land on disk
+// out of order, persisting the older state.
+let saveChain: Promise<unknown> = Promise.resolve();
+function saveSettings(): Promise<unknown> {
+  const snap = currentSettings();
+  saveChain = saveChain.catch(() => {}).then(() => invoke("save_settings", { new: snap }));
+  return saveChain;
+}
+
 // --- Shipping rules: settings panel ---
 
 function saveRules() {
-  invoke("save_settings", { new: currentSettings() }).catch(() => {});
+  saveSettings().catch(() => {});
   renderRepos();
   syncMenuBar();
   emit("ledger-updated");
@@ -1753,7 +1762,7 @@ async function runCheck() {
   btn.disabled = true;
   btn.textContent = "Checking…";
   try {
-    await invoke("save_settings", { new: currentSettings() });
+    await saveSettings();
     renderCheck(await invoke<ArgoCheck>("argo_check"));
   } catch (e) {
     setError("argo-error", String(e));
@@ -1766,7 +1775,7 @@ async function runCheck() {
 async function connect(action: () => Promise<ArgoCheck>) {
   setError("auth-error", null);
   try {
-    await invoke("save_settings", { new: currentSettings() });
+    await saveSettings();
     renderCheck(await action());
   } catch (e) {
     setError("auth-error", String(e));
@@ -1808,14 +1817,14 @@ $<HTMLInputElement>("argo-iap").onchange = (e) => {
 };
 $<HTMLInputElement>("menu-bar-toggle").onchange = (e) => {
   setMenuBar((e.target as HTMLInputElement).checked);
-  invoke("save_settings", { new: currentSettings() });
+  saveSettings();
 };
 function wireHideToggle(id: string, apply: (on: boolean) => void, filter: StatusFilter) {
   $<HTMLInputElement>(id).onchange = (e) => {
     apply((e.target as HTMLInputElement).checked);
     // The active chip may have just been hidden along with its repos.
     if (statusFilter === filter && (e.target as HTMLInputElement).checked) statusFilter = "all";
-    invoke("save_settings", { new: currentSettings() });
+    saveSettings();
     resetAndRender();
   };
 }
@@ -1825,7 +1834,7 @@ wireHideToggle("hide-noreleases", (on) => (hideNoReleases = on), "noreleases");
 for (const key of ["pinned", "waiting", "recent"] as const) {
   $<HTMLInputElement>(`panel-sec-${key}`).onchange = (e) => {
     panelSections[key] = (e.target as HTMLInputElement).checked;
-    invoke("save_settings", { new: currentSettings() });
+    saveSettings();
     // The panel re-renders on this event, so an open panel updates live.
     emit("ledger-updated");
   };
@@ -1854,7 +1863,7 @@ invoke<string>("argo_repo_annotation").then((key) => {
 });
 
 function closeSettings() {
-  invoke("save_settings", { new: currentSettings() }).catch(() => {}).then(loadDeployments);
+  saveSettings().catch(() => {}).then(loadDeployments);
   showView("view-repos");
 }
 
