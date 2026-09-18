@@ -179,9 +179,11 @@ function summaryText(): string {
     (r) => isWaiting(statuses.get(r.full_name), pinnedSet.has(r.full_name))
   ).length;
   const total = allRepos.length;
+  const hidden = hiddenCount();
+  const suffix = hidden ? ` ${hidden} hidden by settings.` : "";
   return waiting === 0
-    ? `${total} repos — everything is shipped.`
-    : `${waiting} of ${total} repos have unshipped commits.`;
+    ? `${total} repos — everything is shipped.${suffix}`
+    : `${waiting} of ${total} repos have unshipped commits.${suffix}`;
 }
 
 function summarize() {
@@ -350,10 +352,31 @@ function pinnedRepos(): Repo[] {
   return allRepos.filter((r) => pinnedSet.has(r.full_name)).sort(compareRepos);
 }
 
+// --- Ledger visibility: settings can hide whole categories; a pin overrides ---
+
+let hideShipped = false;
+let hideNoReleases = false;
+
+// A repo whose status hasn't loaded yet stays visible either way.
+function hiddenBySettings(repo: Repo): boolean {
+  const s = statuses.get(repo.full_name);
+  if (!s || s.ahead_by < 0) return false;
+  if (hideShipped && s.latest_tag !== null && s.ahead_by === 0) return true;
+  if (hideNoReleases && s.latest_tag === null) return true;
+  return false;
+}
+
+function hiddenCount(): number {
+  return allRepos.filter((r) => !pinnedSet.has(r.full_name) && hiddenBySettings(r)).length;
+}
+
 function searchedRepos(): Repo[] {
   const q = $<HTMLInputElement>("search").value.toLowerCase();
   return allRepos.filter(
-    (r) => !pinnedSet.has(r.full_name) && r.full_name.toLowerCase().includes(q)
+    (r) =>
+      !pinnedSet.has(r.full_name) &&
+      !hiddenBySettings(r) &&
+      r.full_name.toLowerCase().includes(q)
   );
 }
 
@@ -442,6 +465,8 @@ function renderFilters() {
     ["noreleases", "No releases"],
   ];
   for (const [value, label] of statusDefs) {
+    // A hidden category's chip would only ever count zero.
+    if ((value === "shipped" && hideShipped) || (value === "noreleases" && hideNoReleases)) continue;
     const count = value === "all" ? null : scope.filter((r) => matchesStatus(r, value)).length;
     statusEl.append(chip(label, count, statusFilter === value, () => {
       statusFilter = value;
@@ -1415,6 +1440,8 @@ interface Settings {
   argo_iap_service_account: string;
   theme: string;
   menu_bar: boolean;
+  hide_shipped: boolean;
+  hide_no_releases: boolean;
   panel_sections: PanelSections;
   rules: Rules;
   repo_rules: Record<string, RepoRule>;
@@ -1462,6 +1489,8 @@ function currentSettings(): Settings {
     argo_iap_service_account: iap ? $<HTMLInputElement>("argo-iap-sa").value.trim() : "",
     theme: currentTheme,
     menu_bar: menuBarOn,
+    hide_shipped: hideShipped,
+    hide_no_releases: hideNoReleases,
     panel_sections: panelSections,
     rules,
     repo_rules: repoRules,
@@ -1757,6 +1786,8 @@ async function openSettings() {
   $<HTMLInputElement>("argo-iap-sa").value = s.argo_iap_service_account;
   $("iap-fields").hidden = !s.argo_iap_client_id;
   $<HTMLInputElement>("menu-bar-toggle").checked = s.menu_bar;
+  $<HTMLInputElement>("hide-shipped").checked = hideShipped;
+  $<HTMLInputElement>("hide-noreleases").checked = hideNoReleases;
   $<HTMLInputElement>("panel-sec-pinned").checked = panelSections.pinned;
   $<HTMLInputElement>("panel-sec-waiting").checked = panelSections.waiting;
   $<HTMLInputElement>("panel-sec-recent").checked = panelSections.recent;
@@ -1779,6 +1810,18 @@ $<HTMLInputElement>("menu-bar-toggle").onchange = (e) => {
   setMenuBar((e.target as HTMLInputElement).checked);
   invoke("save_settings", { new: currentSettings() });
 };
+function wireHideToggle(id: string, apply: (on: boolean) => void, filter: StatusFilter) {
+  $<HTMLInputElement>(id).onchange = (e) => {
+    apply((e.target as HTMLInputElement).checked);
+    // The active chip may have just been hidden along with its repos.
+    if (statusFilter === filter && (e.target as HTMLInputElement).checked) statusFilter = "all";
+    invoke("save_settings", { new: currentSettings() });
+    resetAndRender();
+  };
+}
+wireHideToggle("hide-shipped", (on) => (hideShipped = on), "shipped");
+wireHideToggle("hide-noreleases", (on) => (hideNoReleases = on), "noreleases");
+
 for (const key of ["pinned", "waiting", "recent"] as const) {
   $<HTMLInputElement>(`panel-sec-${key}`).onchange = (e) => {
     panelSections[key] = (e.target as HTMLInputElement).checked;
@@ -1885,6 +1928,8 @@ invoke<Settings>("get_settings").then((s) => {
   rules = { ...DEFAULT_RULES, ...s.rules };
   repoRules = s.repo_rules ?? {};
   panelSections = { ...panelSections, ...s.panel_sections };
+  hideShipped = s.hide_shipped;
+  hideNoReleases = s.hide_no_releases;
   setMenuBar(s.menu_bar);
   if (allRepos.length) renderRepos();
 });

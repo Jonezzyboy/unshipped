@@ -23,6 +23,10 @@ pub struct Settings {
     #[serde(default)]
     pub menu_bar: bool,
     #[serde(default)]
+    pub hide_shipped: bool,
+    #[serde(default)]
+    pub hide_no_releases: bool,
+    #[serde(default)]
     pub panel_sections: PanelSections,
     #[serde(default)]
     pub rules: Rules,
@@ -118,6 +122,8 @@ impl Default for Settings {
             argo_iap_service_account: String::new(),
             theme: default_theme(),
             menu_bar: false,
+            hide_shipped: false,
+            hide_no_releases: false,
             panel_sections: PanelSections::default(),
             rules: Rules::default(),
             repo_rules: BTreeMap::new(),
