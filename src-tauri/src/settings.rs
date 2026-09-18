@@ -3,8 +3,13 @@ use std::collections::BTreeMap;
 use std::fs;
 use tauri::Manager;
 
+/// Bumped when a stored value's meaning changes; `load` migrates older files.
+const SCHEMA: u32 = 1;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Settings {
+    #[serde(default)]
+    pub schema: u32,
     #[serde(default)]
     pub argo_url: String,
     #[serde(default)]
@@ -42,14 +47,15 @@ impl Default for PanelSections {
     }
 }
 
-/// When a repo with commits waiting is worth flagging.
+/// When a repo with commits waiting is worth flagging. Every rule is opt-in:
+/// nothing gets flagged or notified unless the user turned it on.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Rules {
-    #[serde(default = "on")]
+    #[serde(default)]
     pub commits_enabled: bool,
     #[serde(default = "default_commits")]
     pub commits: u64,
-    #[serde(default = "on")]
+    #[serde(default)]
     pub days_enabled: bool,
     #[serde(default = "default_days")]
     pub days: u64,
@@ -87,9 +93,9 @@ fn default_days() -> u64 {
 impl Default for Rules {
     fn default() -> Self {
         Self {
-            commits_enabled: true,
+            commits_enabled: false,
             commits: default_commits(),
-            days_enabled: true,
+            days_enabled: false,
             days: default_days(),
             breaking: false,
             pinned_only: false,
@@ -105,6 +111,7 @@ fn default_theme() -> String {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            schema: SCHEMA,
             argo_url: String::new(),
             argo_insecure: false,
             argo_iap_client_id: String::new(),
@@ -125,14 +132,25 @@ fn path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 pub fn load(app: &tauri::AppHandle) -> Settings {
-    path(app)
+    let mut s: Settings = path(app)
         .ok()
         .and_then(|p| fs::read_to_string(p).ok())
         .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Rules used to default on, so a pre-schema file's enables were written by
+    // the default, not the user — reset them once to make the rules opt-in.
+    if s.schema < 1 {
+        s.rules.commits_enabled = false;
+        s.rules.days_enabled = false;
+    }
+    s
 }
 
 pub fn save(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
-    let raw = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    // The frontend payload doesn't carry the schema; stamp it here so a saved
+    // file is never re-migrated.
+    let mut settings = settings.clone();
+    settings.schema = SCHEMA;
+    let raw = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
     fs::write(path(app)?, raw).map_err(|e| e.to_string())
 }

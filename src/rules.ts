@@ -22,10 +22,11 @@ export interface RuleStatus extends WaitingStatus {
   breaking?: boolean;
 }
 
+// Every rule is opt-in — keep in sync with Rules::default in settings.rs.
 export const DEFAULT_RULES: Rules = {
-  commits_enabled: true,
+  commits_enabled: false,
   commits: 10,
-  days_enabled: true,
+  days_enabled: false,
   days: 14,
   breaking: false,
   pinned_only: false,
