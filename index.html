@@ -91,6 +91,7 @@
         <div class="settings-layout">
           <nav class="settings-nav" aria-label="Settings sections">
             <button type="button" data-section="appearance">Appearance</button>
+            <button type="button" data-section="ledger">Ledger</button>
             <button type="button" data-section="menubar">Menu bar</button>
             <button type="button" data-section="rules">Shipping rules</button>
             <button type="button" data-section="integrations">Integrations</button>
@@ -101,6 +102,27 @@
               <h3>Appearance</h3>
               <p class="hint">Theme applies immediately and is remembered between sessions.</p>
               <div id="theme-options" class="theme-options" role="radiogroup" aria-label="Theme"></div>
+            </section>
+
+            <section id="panel-ledger" class="settings-panel" hidden>
+              <h3>Ledger</h3>
+              <p class="hint">Trim the list down to repos that could actually ship.</p>
+
+              <label class="check setting">
+                <input type="checkbox" id="hide-shipped" />
+                Hide fully shipped repos
+              </label>
+              <p class="hint setting-note">
+                Repos whose latest release has nothing waiting behind it.
+              </p>
+
+              <label class="check setting">
+                <input type="checkbox" id="hide-noreleases" />
+                Hide repos with no releases
+              </label>
+              <p class="hint setting-note">
+                Repos that have never cut a release. A pinned repo always stays visible.
+              </p>
             </section>
 
             <section id="panel-menubar" class="settings-panel" hidden>
