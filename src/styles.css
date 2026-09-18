@@ -250,13 +250,15 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 1rem;
-  min-height: 32px;
-  padding: 0 1.4rem 0 74px;
+  /* Matches the height other macOS apps give a unified title bar. */
+  min-height: 52px;
+  padding: 0 1.1rem 0 84px;
   position: sticky;
   top: 0;
   background: var(--bg);
   z-index: 2;
 }
+.topbar .wordmark { font-size: 1.3rem; }
 .search-wrap { position: relative; display: flex; align-items: center; width: 16rem; }
 /* Shorter than a standalone field: in the band it sits beside 24px chips. */
 .filterbar #search { padding: 0.3em 1.8rem 0.3em 0.7em; }
@@ -277,12 +279,16 @@ a:hover { text-decoration: underline; }
   display: grid;
   place-items: center;
   border: none;
-  padding: 0.4em;
-  border-radius: 6px;
+  background: none;
+  /* The base button's uneven padding shifts the glyph inside the fixed box. */
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
   color: var(--muted);
 }
 .icon-btn:hover { color: var(--text); background: var(--surface); }
-.avatar { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); }
+.avatar { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); }
 #username { color: var(--muted); font-size: 0.85rem; }
 
 .profile-menu { position: relative; }
@@ -1014,6 +1020,7 @@ a.panel-tag:hover { text-decoration: underline; }
   font-size: 0.85rem;
 }
 .panel-link:hover { color: var(--lamp); }
+.panel-foot .icon-btn { width: 28px; height: 28px; }
 #panel-open { flex: 1; text-align: left; }
 /* Quitting is the one thing here that cannot be undone: it sits behind a
    divider, away from the buttons reached for by habit. */
