@@ -288,6 +288,26 @@ a:hover { text-decoration: underline; }
   color: var(--muted);
 }
 .icon-btn:hover { color: var(--text); background: var(--surface); }
+
+/* Carries both halves of the refresh story: how stale the ledger is at rest,
+   how far through the sweep is while it runs. */
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.35em 0.7em;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.refresh-btn:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+.refresh-btn:disabled { cursor: default; }
+.refresh-btn[data-busy] { color: var(--text); }
+.refresh-btn[data-busy] svg { color: var(--lamp); }
 .avatar { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); }
 #username { color: var(--muted); font-size: 0.85rem; }
 
@@ -386,6 +406,21 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--line);
 }
 .repo-row:hover { background: var(--surface); }
+/* Held for a beat after a status lands, so a row that changed under you is
+   attributable to the sweep rather than to something you did. */
+.repo-row[data-landed] {
+  background: color-mix(in srgb, var(--lamp) 7%, transparent);
+  box-shadow: inset 2px 0 0 var(--lamp);
+}
+.skeleton {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.repo-tag .skeleton { width: 3.6rem; }
+.repo-age .skeleton { width: 2.6rem; }
+.deploy .skeleton { width: 5.4rem; }
 .repo-name { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .repo-name .owner { color: var(--muted); font-weight: 400; }
 .repo-name a { color: inherit; }
@@ -463,7 +498,11 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--line);
   color: var(--muted);
 }
-.lamp[data-heat="loading"] { color: var(--muted); border-style: dashed; }
+.lamp[data-heat="loading"] {
+  color: var(--lamp);
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--lamp) 45%, transparent);
+}
 .lamp[data-heat="shipped"] { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
 .lamp[data-heat="warm"] {
   color: var(--lamp);
@@ -880,8 +919,10 @@ body[data-argo="off"] .ledger-head [data-sort="deployed"] { display: none; }
 
 .icon-btn[data-busy] { color: var(--lamp); }
 @media (prefers-reduced-motion: no-preference) {
-  .lamp[data-heat="loading"] { animation: pulse 1.6s ease-in-out infinite; }
+  .lamp[data-heat="loading"], .skeleton { animation: pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: 0.45; } }
+  /* The refresh glyph keeps inside the viewBox's inscribed circle: anything
+     nearer a corner is clipped by the viewport as it comes round. */
   .icon-btn[data-busy] svg { animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
 }
