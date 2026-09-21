@@ -121,9 +121,13 @@ function saveStatusCache() {
   localStorage.setItem(cacheKey(STATUS_KEY), JSON.stringify(statusCache));
 }
 
+const LANDED_MS = 1200;
+const landedAt = new Map<string, number>();
+
 function cacheStatus(repo: Repo, status: RepoStatus) {
   statuses.set(repo.full_name, status);
   statusCache[repo.full_name] = { pushed_at: repo.pushed_at, status };
+  landedAt.set(repo.full_name, Date.now());
 }
 
 function seedFromCache(repos: Repo[]): Repo[] {
@@ -141,11 +145,27 @@ function seedFromCache(repos: Repo[]): Repo[] {
 
 let refreshing = false;
 
+// Mirrors the tray panel's wording so the two windows read the same.
+function checkedLabel(): string {
+  const iso = localStorage.getItem(cacheKey(CHECKED_KEY));
+  if (!iso) return "Never checked";
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return "Checked just now";
+  if (mins < 60) return `Checked ${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  return hours < 24 ? `Checked ${hours}h ago` : "Checked a while ago";
+}
+
+function setRefreshLabel(text: string) {
+  $("refresh-label").textContent = text;
+}
+
 function setRefreshing(on: boolean) {
   refreshing = on;
   const btn = $<HTMLButtonElement>("btn-refresh");
   btn.toggleAttribute("data-busy", on);
   btn.disabled = on;
+  setRefreshLabel(on ? "Checking…" : checkedLabel());
 }
 
 async function loadRepos() {
@@ -159,8 +179,10 @@ async function loadRepos() {
     allRepos = cachedRepos;
     seedFromCache(allRepos);
     renderRepos();
+    // The table below is the cached one, so the caption under it says so too;
+    // the refresh control is what narrates the sweep.
+    summarize();
   }
-  $("repo-summary").textContent = "Refreshing repos…";
   loadDeployments();
 
   try {
@@ -223,7 +245,7 @@ async function fetchStatuses(repos: Repo[]) {
       checked += 1;
       // Section back-fills also land here; only a full refresh narrates progress.
       if (refreshing && total >= 5) {
-        $("repo-summary").textContent = `Checking ${checked} of ${total} repos…`;
+        setRefreshLabel(`Checking ${checked} of ${total}`);
       }
       scheduleRender();
     }
@@ -245,6 +267,7 @@ interface Deployments { configured: boolean; apps: ArgoApp[]; error: string | nu
 
 let argoAppsByRepo = new Map<string, ArgoApp[]>();
 let argoConfigured = false;
+let deploymentsLoading = false;
 
 const ARGO_COLUMN_KEY = "unshipped:argo-column:v1";
 
@@ -254,9 +277,11 @@ function setArgoColumn(on: boolean) {
 }
 
 async function loadDeployments() {
+  deploymentsLoading = true;
   const result = await invoke<Deployments>("argo_deployments").catch(
     (e): Deployments => ({ configured: true, apps: [], error: String(e) })
   );
+  deploymentsLoading = false;
 
   argoConfigured = result.configured;
   setArgoColumn(result.configured);
@@ -303,7 +328,7 @@ function heat(status: RepoStatus | undefined): string {
 }
 
 function lampText(status: RepoStatus | undefined): string {
-  if (!status) return "…";
+  if (!status) return "checking";
   if (status.ahead_by < 0) return "error";
   if (status.ahead_by === 0) return "shipped";
   return `${status.ahead_by} waiting`;
@@ -516,6 +541,8 @@ function buildRow(repo: Repo): HTMLElement {
   const li = document.createElement("li");
   li.className = "repo-row";
   if (flagsFor(repo).length) li.dataset.flagged = "";
+  const landed = landedAt.get(repo.full_name);
+  if (landed !== undefined && Date.now() - landed < LANDED_MS) li.dataset.landed = "";
   li.append(
     rowSelect(repo),
     rowName(repo),
@@ -641,26 +668,39 @@ function rowLamp(repo: Repo): HTMLElement {
   return el;
 }
 
+function skeleton(): HTMLElement {
+  const el = document.createElement("span");
+  el.className = "skeleton";
+  return el;
+}
+
 function rowTag(repo: Repo): HTMLElement {
   const status = statuses.get(repo.full_name);
   const el = document.createElement("span");
   el.className = "repo-tag";
-  if (status?.latest_tag && status.release_url) {
+  if (!status) {
+    el.append(skeleton());
+  } else if (status.latest_tag && status.release_url) {
     const a = document.createElement("a");
     a.href = "#";
     a.textContent = status.latest_tag;
     a.onclick = (e) => { e.preventDefault(); openUrl(status.release_url!); };
     el.append(a);
-  } else if (status) {
+  } else {
     el.textContent = "no releases";
   }
   return el;
 }
 
 function rowAge(repo: Repo): HTMLElement {
+  const status = statuses.get(repo.full_name);
   const el = document.createElement("span");
   el.className = "repo-age";
-  el.textContent = relAge(statuses.get(repo.full_name)?.published_at ?? null);
+  if (!status) {
+    el.append(skeleton());
+  } else {
+    el.textContent = relAge(status.published_at);
+  }
   return el;
 }
 
@@ -668,6 +708,11 @@ function rowDeploy(repo: Repo): HTMLElement {
   const el = document.createElement("span");
   el.className = "deploy";
   const apps = appsFor(repo);
+  // Until Argo answers, an empty map is indistinguishable from "nothing deploys this".
+  if (deploymentsLoading && !apps.length) {
+    el.append(skeleton());
+    return el;
+  }
   if (!apps.length) {
     el.textContent = "—";
     el.title = argoConfigured
@@ -2109,6 +2154,11 @@ invoke<Settings>("get_settings").then((s) => {
   setMenuBar(s.menu_bar);
   if (allRepos.length) renderRepos();
 });
+// "Checked 4 min ago" goes stale on its own; nothing else redraws it between sweeps.
+setInterval(() => {
+  if (!refreshing) setRefreshLabel(checkedLabel());
+}, 30_000);
+
 (async () => {
   demoMode = await invoke<boolean>("is_demo").catch(() => false);
   statusCache = readCache<Record<string, CachedStatus>>(cacheKey(STATUS_KEY)) ?? {};
