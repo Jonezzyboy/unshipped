@@ -11,8 +11,10 @@
   --err: #e5645f;
   --on-accent: #171104;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
-  /* The sticky title bar's height — anything else that sticks clears it. */
+  /* Heights of the two sticky bands, so what parks beneath them clears them.
+     Each band is held to its value rather than measured back from content. */
   --titlebar-h: 52px;
+  --page-head-h: 48px;
   /* Shared by header and rows — the actions column is fixed so every row's
      fr tracks resolve identically whether or not the row has a button. */
   --ledger-cols: 1.1rem minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem minmax(8rem, 1fr) 12.5rem;
@@ -556,7 +558,12 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 1.1rem 1.4rem 0;
+  padding: 0 1.4rem;
+  min-height: var(--page-head-h);
+  position: sticky;
+  top: var(--titlebar-h);
+  background: var(--bg);
+  z-index: 1;
 }
 .page-title { margin: 0; font-size: 1.15rem; font-weight: 650; letter-spacing: 0.02em; }
 .back {
@@ -575,7 +582,7 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   max-width: 64rem;
 }
 /* The page scrolls, so the window keeps its own overlay scrollbar; the
-   section list rides along under the title bar instead of leaving with it. */
+   section list rides along under the two bands instead of leaving with them. */
 .settings-nav {
   display: flex;
   flex-direction: column;
@@ -583,9 +590,9 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   width: 11rem;
   flex-shrink: 0;
   position: sticky;
-  top: calc(var(--titlebar-h) + 0.6rem);
+  top: calc(var(--titlebar-h) + var(--page-head-h) + 0.6rem);
   align-self: flex-start;
-  max-height: calc(100vh - var(--titlebar-h) - 1.2rem);
+  max-height: calc(100vh - var(--titlebar-h) - var(--page-head-h) - 1.2rem);
   overflow-y: auto;
 }
 .settings-nav button {
