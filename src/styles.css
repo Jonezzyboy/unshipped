@@ -11,6 +11,8 @@
   --err: #e5645f;
   --on-accent: #171104;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  /* The sticky title bar's height — anything else that sticks clears it. */
+  --titlebar-h: 52px;
   /* Shared by header and rows — the actions column is fixed so every row's
      fr tracks resolve identically whether or not the row has a button. */
   --ledger-cols: 1.1rem minmax(12rem, 1.4fr) minmax(7rem, 0.8fr) minmax(6rem, 0.7fr) 6.5rem minmax(8rem, 1fr) 12.5rem;
@@ -251,7 +253,7 @@ a:hover { text-decoration: underline; }
   align-items: center;
   gap: 1rem;
   /* Matches the height other macOS apps give a unified title bar. */
-  min-height: 52px;
+  min-height: var(--titlebar-h);
   padding: 0 1.1rem 0 84px;
   position: sticky;
   top: 0;
@@ -566,26 +568,24 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
 }
 .back:hover { color: var(--text); }
 
-/* The chrome — title bar, page head, section list — is fixed and only the
-   panel column scrolls, so the section you are in stays on screen. */
-#view-settings {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
 .settings-layout {
   display: flex;
   gap: 2.5rem;
-  padding: 1.2rem 1.4rem 0;
-  flex: 1;
-  min-height: 0;
+  padding: 1.2rem 1.4rem 3rem;
+  max-width: 64rem;
 }
+/* The page scrolls, so the window keeps its own overlay scrollbar; the
+   section list rides along under the title bar instead of leaving with it. */
 .settings-nav {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
   width: 11rem;
   flex-shrink: 0;
+  position: sticky;
+  top: calc(var(--titlebar-h) + 0.6rem);
+  align-self: flex-start;
+  max-height: calc(100vh - var(--titlebar-h) - 1.2rem);
   overflow-y: auto;
 }
 .settings-nav button {
@@ -601,10 +601,7 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   color: var(--lamp);
   background: color-mix(in srgb, var(--lamp) 9%, transparent);
 }
-/* Scrolls the full width so the bar sits at the window edge; the reading
-   measure is held by the panel inside it. */
-.settings-content { flex: 1; min-width: 0; overflow-y: auto; padding-bottom: 3rem; }
-.settings-panel { max-width: 34rem; }
+.settings-content { flex: 1; min-width: 0; max-width: 34rem; }
 .settings-panel h3 { margin: 0 0 0.2rem; font-size: 1rem; }
 
 .theme-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.6rem; margin: 0.8rem 0 0.4rem; }

@@ -1544,9 +1544,9 @@ function showSettingsSection(section: string) {
   for (const panel of document.querySelectorAll<HTMLElement>(".settings-panel")) {
     panel.hidden = panel.id !== `panel-${section}`;
   }
-  // The column keeps its scroll offset between sections, which would drop you
+  // The page keeps its scroll offset between sections, which would drop you
   // into the middle of the one you just picked.
-  document.querySelector(".settings-content")?.scrollTo(0, 0);
+  window.scrollTo(0, 0);
 }
 
 function currentSettings(): Settings {
