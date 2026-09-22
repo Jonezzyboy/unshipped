@@ -35,6 +35,12 @@ pub struct Settings {
     pub rules: Rules,
     #[serde(default)]
     pub repo_rules: BTreeMap<String, RepoRule>,
+    /// The tag a repo with nothing released yet opens at.
+    #[serde(default = "default_start_tag")]
+    pub start_tag: String,
+    /// Repos that count by a rule of their own, keyed by full name.
+    #[serde(default)]
+    pub repo_rules_version: BTreeMap<String, crate::version::Rule>,
 }
 
 /// Which sections the menu bar panel shows.
@@ -115,6 +121,10 @@ fn default_theme() -> String {
     "harbor".into()
 }
 
+fn default_start_tag() -> String {
+    "v0.1.0".into()
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -131,6 +141,8 @@ impl Default for Settings {
             panel_sections: PanelSections::default(),
             rules: Rules::default(),
             repo_rules: BTreeMap::new(),
+            start_tag: default_start_tag(),
+            repo_rules_version: BTreeMap::new(),
         }
     }
 }

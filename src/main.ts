@@ -37,8 +37,16 @@ interface RepoStatus {
   breaking?: boolean;
 }
 type BumpLevel = "major" | "minor" | "patch";
-interface Suggestion { level: BumpLevel; reason: string; major: string; minor: string; patch: string }
-interface ReleasePrep { current_tag: string | null; suggestion: Suggestion; commit_count: number; commits: string[] }
+type VersionRule = "calendar";
+type Basis = "semver" | "calendar" | "first-release" | "unreadable";
+interface Suggestion {
+  level: BumpLevel; reason: string; major: string; minor: string; patch: string;
+  basis: Basis; next: string | null;
+}
+interface ReleasePrep {
+  current_tag: string | null; suggestion: Suggestion; commit_count: number; commits: string[];
+  rule: VersionRule | null;
+}
 interface Notes { name: string; body: string }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -380,6 +388,11 @@ function togglePin(repo: Repo) {
 
 let rules: Rules = { ...DEFAULT_RULES };
 let repoRules: Record<string, RepoRule> = {};
+const DEFAULT_START_TAG = "v0.1.0";
+let startTag = DEFAULT_START_TAG;
+let repoVersionRules: Record<string, VersionRule> = {};
+
+const ruleName = (rule: VersionRule) => (rule === "calendar" ? "Calendar" : rule);
 
 function flagsFor(repo: Repo): string[] {
   return flagReasons(statuses.get(repo.full_name), {
@@ -871,10 +884,13 @@ async function openReleaseDialog(repo: Repo) {
   dialog.showModal();
 
   try {
+    const now = new Date();
     const prep = await invoke<ReleasePrep>("prepare_release", {
       owner: repo.owner.login,
       repo: repo.name,
       defaultBranch: repo.default_branch,
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
     });
     renderPrep(repo, prep);
   } catch (e) {
@@ -899,28 +915,82 @@ function renderPrep(repo: Repo, prep: ReleasePrep) {
   $("rel-commits-summary").textContent = `Commits (${prep.commits.length}${prep.commit_count > prep.commits.length ? ` of ${prep.commit_count}` : ""})`;
   $("rel-commits-wrap").hidden = prep.commits.length === 0;
 
+  const basis = prep.suggestion.basis;
+  const semver = basis === "semver";
+  $("rel-unreadable").hidden = basis !== "unreadable";
+  $("bump-choices").hidden = !semver;
+  $("rel-keep-wrap").hidden = true;
+
   const choices = $("bump-choices");
   choices.innerHTML = "";
-  for (const level of ["major", "minor", "patch"] as BumpLevel[]) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "bump";
-    btn.setAttribute("role", "radio");
-    const suggested = level === prep.suggestion.level;
-    btn.innerHTML = `<span class="kind">${level}${suggested ? ' <span class="suggested">suggested</span>' : ""}</span><span class="ver">${prep.suggestion[level]}</span>`;
-    btn.onclick = () => selectBump(repo, prep, level);
-    choices.append(btn);
+  if (semver) {
+    for (const level of ["major", "minor", "patch"] as BumpLevel[]) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "bump";
+      btn.setAttribute("role", "radio");
+      const suggested = level === prep.suggestion.level;
+      btn.innerHTML = `<span class="kind">${level}${suggested ? ' <span class="suggested">suggested</span>' : ""}</span><span class="ver">${prep.suggestion[level]}</span>`;
+      btn.onclick = () => selectBump(repo, prep, level);
+      choices.append(btn);
+    }
+    selectBump(repo, prep, prep.suggestion.level);
+    return;
   }
-  selectBump(repo, prep, prep.suggestion.level);
+
+  if (basis === "unreadable") {
+    $("rel-unreadable-msg").textContent = `${prep.current_tag} is not a version unshipped can count from.`;
+    $("rel-unreadable-hint").textContent =
+      "Major, minor and patch would restart at zero, so name the tag yourself — this repo will keep how you count it.";
+  }
+  $("rel-tag-note").textContent =
+    basis === "calendar" ? "Counted by calendar month." : basis === "first-release" ? "First release." : "";
+
+  $<HTMLInputElement>("rel-keep").checked = false;
+  setTag(repo, prep, prep.suggestion.next ?? "");
 }
 
-async function selectBump(repo: Repo, prep: ReleasePrep, level: BumpLevel) {
-  const tag = prep.suggestion[level];
+/// Outside a readable tag's three choices the tag is whatever is in the field,
+/// so the notes and the create button follow it rather than a bump level.
+function setTag(repo: Repo, prep: ReleasePrep, tag: string) {
+  const field = $<HTMLInputElement>("rel-tag");
+  field.value = tag;
   currentBump = { repo, prep, tag };
+  $<HTMLButtonElement>("btn-create-release").disabled = !tag;
+  syncKeepShape(repo, tag);
+  if (tag) loadNotes(repo, prep, tag);
+}
+
+let keepToken = 0;
+
+async function syncKeepShape(repo: Repo, tag: string) {
+  const wrap = $("rel-keep-wrap");
+  const box = $<HTMLInputElement>("rel-keep");
+  const token = ++keepToken;
+  const rule = tag.trim()
+    ? await invoke<VersionRule | null>("rule_for_tag", { tag: tag.trim() }).catch(() => null)
+    : null;
+  if (token !== keepToken) return;
+
+  if (!rule || rule === repoVersionRules[repo.full_name]) {
+    wrap.hidden = true;
+    box.checked = false;
+    return;
+  }
+  wrap.hidden = false;
+  box.dataset.rule = rule;
+  $("rel-keep-label").textContent = `Count ${repo.name} by ${ruleName(rule).toLowerCase()} month from now on`;
+}
+
+function selectBump(repo: Repo, prep: ReleasePrep, level: BumpLevel) {
+  const tag = prep.suggestion[level];
   const buttons = [...$("bump-choices").querySelectorAll<HTMLButtonElement>(".bump")];
   const levels: BumpLevel[] = ["major", "minor", "patch"];
   buttons.forEach((b, i) => b.setAttribute("aria-checked", String(levels[i] === level)));
+  setTag(repo, prep, tag);
+}
 
+async function loadNotes(repo: Repo, prep: ReleasePrep, tag: string) {
   $<HTMLInputElement>("rel-name").value = tag;
   $("notes-status").textContent = " — generating…";
   try {
@@ -943,6 +1013,25 @@ async function selectBump(repo: Repo, prep: ReleasePrep, level: BumpLevel) {
     showRelError(e);
   }
 }
+
+$("start-tag").onchange = () => {
+  const field = $<HTMLInputElement>("start-tag");
+  startTag = field.value.trim() || DEFAULT_START_TAG;
+  field.value = startTag;
+  saveSettings().catch(() => {});
+};
+
+let tagTypingTimer: number | undefined;
+$("rel-tag").oninput = () => {
+  if (!currentBump) return;
+  const { repo, prep } = currentBump;
+  const tag = $<HTMLInputElement>("rel-tag").value.trim();
+  currentBump = { repo, prep, tag };
+  $<HTMLButtonElement>("btn-create-release").disabled = !tag;
+  syncKeepShape(repo, tag);
+  clearTimeout(tagTypingTimer);
+  if (tag) tagTypingTimer = window.setTimeout(() => loadNotes(repo, prep, tag), 400);
+};
 
 function showRelError(e: unknown) {
   const el = $("rel-error");
@@ -993,6 +1082,12 @@ $("btn-create-release").onclick = async () => {
   btn.disabled = true;
   btn.textContent = "Creating…";
   $("rel-error").hidden = true;
+  const keep = $<HTMLInputElement>("rel-keep");
+  if (!$("rel-keep-wrap").hidden && keep.checked && keep.dataset.rule) {
+    repoVersionRules[repo.full_name] = keep.dataset.rule as VersionRule;
+    saveSettings().catch(() => {});
+    if (!$("panel-versioning").hidden) renderVersioningPanel();
+  }
   try {
     const url = await invoke<string>("create_release", {
       owner: repo.owner.login,
@@ -1511,6 +1606,8 @@ interface Settings {
   panel_sections: PanelSections;
   rules: Rules;
   repo_rules: Record<string, RepoRule>;
+  start_tag: string;
+  repo_rules_version: Record<string, VersionRule>;
 }
 
 let panelSections: PanelSections = { pinned: true, waiting: true, recent: true };
@@ -1564,6 +1661,8 @@ function currentSettings(): Settings {
     panel_sections: panelSections,
     rules,
     repo_rules: repoRules,
+    start_tag: startTag.trim() || DEFAULT_START_TAG,
+    repo_rules_version: repoVersionRules,
   };
 }
 
@@ -1610,6 +1709,39 @@ function renderOverrides() {
     drop.onclick = () => {
       delete repoRules[full];
       saveRules();
+    };
+    li.append(name, value, drop);
+    list.append(li);
+  }
+}
+
+function renderVersioningPanel() {
+  $<HTMLInputElement>("start-tag").value = startTag;
+
+  const list = $("version-rules");
+  list.innerHTML = "";
+  const entries = Object.entries(repoVersionRules).sort(([a], [b]) => a.localeCompare(b));
+  list.hidden = entries.length === 0;
+  $("version-rules-note").textContent = entries.length
+    ? "Set when you name a tag yourself in the release dialog."
+    : "None yet — set when you name a tag yourself in the release dialog.";
+
+  for (const [full, rule] of entries) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "override-name";
+    name.textContent = full;
+    const value = document.createElement("span");
+    value.className = "override-value";
+    value.textContent = ruleName(rule);
+    const drop = document.createElement("button");
+    drop.type = "button";
+    drop.className = "ghost";
+    drop.textContent = "Remove";
+    drop.onclick = () => {
+      delete repoVersionRules[full];
+      saveSettings().catch(() => {});
+      renderVersioningPanel();
     };
     li.append(name, value, drop);
     list.append(li);
@@ -1873,6 +2005,7 @@ async function openSettings() {
   recordingFor = null;
   renderShortcutRows();
   renderRulesPanel();
+  renderVersioningPanel();
   renderThemeOptions();
 
   renderCheck(await invoke<ArgoCheck>("argo_check"));
@@ -2149,6 +2282,8 @@ invoke<Settings>("get_settings").then((s) => {
   if (s.theme !== currentTheme) applyTheme(s.theme);
   rules = { ...DEFAULT_RULES, ...s.rules };
   repoRules = s.repo_rules ?? {};
+  startTag = s.start_tag || DEFAULT_START_TAG;
+  repoVersionRules = s.repo_rules_version ?? {};
   panelSections = { ...panelSections, ...s.panel_sections };
   hideShipped = s.hide_shipped;
   hideNoReleases = s.hide_no_releases;
