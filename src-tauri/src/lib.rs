@@ -241,24 +241,40 @@ struct ReleasePrep {
     suggestion: version::Suggestion,
     commit_count: u64,
     commits: Vec<String>,
+    rule: Option<version::Rule>,
 }
 
+/// The rule a tag someone typed is worth remembering under, so the release
+/// dialog can offer to keep it. None when nothing needs storing.
+#[tauri::command]
+fn rule_for_tag(tag: String) -> Option<version::Rule> {
+    version::rule_for(&tag)
+}
+
+/// The calendar month comes from the window rather than the clock here: a
+/// calendar tag is named for the month the person cutting it is in.
 #[tauri::command]
 async fn prepare_release(
+    app: tauri::AppHandle,
     owner: String,
     repo: String,
     default_branch: String,
+    year: i32,
+    month: u32,
 ) -> Result<ReleasePrep, String> {
+    let settings = settings::load(&app);
+    let full = format!("{owner}/{repo}");
+    let rule = settings.repo_rules_version.get(&full).copied();
     if demo::enabled() {
-        let full = format!("{owner}/{repo}");
         let (tag, _, ahead) = demo::status(&full);
         let commits = demo::commits(&full);
-        let suggestion = version::suggest(tag, &commits);
+        let suggestion = version::suggest(tag, &commits, rule, &settings.start_tag, (year, month));
         return Ok(ReleasePrep {
             current_tag: tag.map(String::from),
             suggestion,
             commit_count: ahead,
             commits,
+            rule,
         });
     }
     let token = token()?;
@@ -278,7 +294,7 @@ async fn prepare_release(
         }
     };
 
-    let suggestion = version::suggest(current_tag.as_deref(), &messages);
+    let suggestion = version::suggest(current_tag.as_deref(), &messages, rule, &settings.start_tag, (year, month));
     let first_lines = messages
         .iter()
         .map(|m| m.lines().next().unwrap_or("").to_string())
@@ -289,6 +305,7 @@ async fn prepare_release(
         suggestion,
         commit_count: count,
         commits: first_lines,
+        rule,
     })
 }
 
@@ -367,6 +384,7 @@ pub fn run() {
             list_repos,
             repo_status,
             prepare_release,
+            rule_for_tag,
             generate_notes,
             create_release,
             set_menu_bar,

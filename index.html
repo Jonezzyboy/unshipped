@@ -95,6 +95,7 @@
             <button type="button" data-section="ledger">Ledger</button>
             <button type="button" data-section="menubar">Menu bar</button>
             <button type="button" data-section="rules">Shipping rules</button>
+            <button type="button" data-section="versioning">Versioning</button>
             <button type="button" data-section="shortcuts">Shortcuts</button>
             <button type="button" data-section="integrations">Integrations</button>
             <button type="button" data-section="about">About</button>
@@ -214,6 +215,24 @@
               <div class="facts-head">Per-repo overrides</div>
               <ul id="rule-overrides" class="overrides"></ul>
               <p class="hint" id="rule-overrides-note"></p>
+            </section>
+
+            <section id="panel-versioning" class="settings-panel" hidden>
+              <h3>Versioning</h3>
+              <p class="hint">
+                A repo is counted from its own last tag, prefix and all. These cover the two cases
+                where there is nothing to count from.
+              </p>
+
+              <label class="field start-tag-field">
+                <span>New repos start at</span>
+                <input id="start-tag" class="mono" spellcheck="false" />
+              </label>
+              <p class="hint field-note">The tag offered for a repo's first ever release.</p>
+
+              <div class="facts-head">Repos counted their own way</div>
+              <ul id="version-rules" class="overrides"></ul>
+              <p class="hint" id="version-rules-note"></p>
             </section>
 
             <section id="panel-shortcuts" class="settings-panel" hidden>
@@ -429,7 +448,26 @@
         <div id="rel-loading" class="hint">Reading commits since the last release…</div>
         <div id="rel-body" hidden>
           <p id="rel-reason" class="hint"></p>
+          <div id="rel-unreadable" class="unreadable" hidden>
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 1.5 15 14H1L8 1.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+              <path d="M8 6v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+              <circle cx="8" cy="11.8" r="0.9" fill="currentColor" />
+            </svg>
+            <div>
+              <p id="rel-unreadable-msg"></p>
+              <p id="rel-unreadable-hint" class="hint"></p>
+            </div>
+          </div>
           <div id="bump-choices" class="bumps" role="radiogroup" aria-label="Version bump"></div>
+          <label class="field">
+            <span>Tag <em id="rel-tag-note"></em></span>
+            <input id="rel-tag" class="mono tag-field" spellcheck="false" />
+          </label>
+          <label id="rel-keep-wrap" class="check" hidden>
+            <input type="checkbox" id="rel-keep" />
+            <span id="rel-keep-label"></span>
+          </label>
           <details id="rel-commits-wrap">
             <summary id="rel-commits-summary"></summary>
             <ul id="rel-commits" class="commits mono"></ul>
