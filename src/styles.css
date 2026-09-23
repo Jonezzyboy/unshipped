@@ -613,9 +613,12 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   width: 11rem;
   flex-shrink: 0;
   position: sticky;
-  top: calc(var(--titlebar-h) + var(--page-head-h) + 0.6rem);
+  /* Sticks exactly where it already sits — the bands above it plus the
+     layout's own top padding — so it never travels before it catches. */
+  top: calc(var(--titlebar-h) + var(--page-head-h) + 1.2rem);
   align-self: flex-start;
-  max-height: calc(100vh - var(--titlebar-h) - var(--page-head-h) - 1.2rem);
+  /* Only a list too tall for the window scrolls, and only under the pointer. */
+  max-height: calc(100vh - var(--titlebar-h) - var(--page-head-h) - 2.4rem);
   overflow-y: auto;
 }
 .settings-nav button {
