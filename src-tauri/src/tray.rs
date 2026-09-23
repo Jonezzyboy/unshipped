@@ -32,7 +32,7 @@ pub fn apply(app: &AppHandle, enabled: bool, title: String) -> Result<(), String
         .menu(&menu)
         .show_menu_on_left_click(false)
         .title(title)
-        .tooltip("unshipped")
+        .tooltip("Unshipped")
         .on_menu_event(on_menu_event)
         .on_tray_icon_event(on_tray_event);
     match tauri::image::Image::from_bytes(TRAY_ICON) {

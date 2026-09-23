@@ -2,7 +2,7 @@
 # Copies the release bundle into /Applications and launches it.
 set -e
 
-APP_NAME="unshipped.app"
+APP_NAME="Unshipped.app"
 SRC="src-tauri/target/release/bundle/macos/$APP_NAME"
 DEST="/Applications/$APP_NAME"
 
