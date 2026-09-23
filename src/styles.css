@@ -1060,6 +1060,20 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
   text-align: right;
   font-size: 0.78rem;
   color: var(--muted);
+  /* A word wide. Anything with more to say uses .train-msg below the row,
+     where it has the width to say it. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.train-msg {
+  grid-column: 1 / -1;
+  margin: 0.1rem 0 0;
+  padding-left: 2.9rem;
+  font-size: 0.78rem;
+  color: var(--err);
+  overflow-wrap: anywhere;
 }
 .train-row[data-state="running"] .state { color: var(--lamp); }
 .train-row[data-state="done"] .state { color: var(--ok); }
