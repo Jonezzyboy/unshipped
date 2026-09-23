@@ -67,7 +67,7 @@ jobs:
       # Without a re-seal the copied bundle reads as "damaged" and refuses to
       # open at all; ad-hoc leaves the normal unidentified-developer prompt.
       - name: Ad-hoc sign
-        run: codesign --force --deep --sign - src-tauri/target/release/bundle/macos/unshipped.app
+        run: codesign --force --deep --sign - src-tauri/target/release/bundle/macos/Unshipped.app
 
       - run: sh scripts/bundle-dmg.sh
 

@@ -5,12 +5,14 @@
 # at an explicit mountpoint and copying in by hand avoids /Volumes entirely.
 set -e
 
-APP_NAME="unshipped.app"
-VOL_NAME="unshipped"
+APP_NAME="Unshipped.app"
+VOL_NAME="Unshipped"
+# The download keeps the lower-case token the cask and the tap are named for.
+DMG_NAME="unshipped"
 APP="src-tauri/target/release/bundle/macos/$APP_NAME"
 OUT_DIR="src-tauri/target/release/bundle/dmg"
 VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
-DMG="$OUT_DIR/${VOL_NAME}_${VERSION}_$(uname -m).dmg"
+DMG="$OUT_DIR/${DMG_NAME}_${VERSION}_$(uname -m).dmg"
 
 if [ ! -d "$APP" ]; then
   echo "No bundle at $APP — run 'npm run bundle' first." >&2
