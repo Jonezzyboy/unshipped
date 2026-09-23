@@ -870,6 +870,20 @@ $<HTMLDialogElement>("rules-dialog").addEventListener("close", () => {
 
 let currentBump: { repo: Repo; prep: ReleasePrep; tag: string } | null = null;
 
+/// The only caller of prepare_release. Its calendar month comes from here
+/// rather than the clock in Rust: a calendar tag is named for the month the
+/// person cutting it is in.
+function prepareRelease(repo: Repo): Promise<ReleasePrep> {
+  const now = new Date();
+  return invoke<ReleasePrep>("prepare_release", {
+    owner: repo.owner.login,
+    repo: repo.name,
+    defaultBranch: repo.default_branch,
+    year: now.getFullYear(),
+    month: now.getMonth() + 1,
+  });
+}
+
 async function openReleaseDialog(repo: Repo) {
   const dialog = $<HTMLDialogElement>("release-dialog");
   $("rel-title").textContent = repo.full_name;
@@ -884,14 +898,7 @@ async function openReleaseDialog(repo: Repo) {
   dialog.showModal();
 
   try {
-    const now = new Date();
-    const prep = await invoke<ReleasePrep>("prepare_release", {
-      owner: repo.owner.login,
-      repo: repo.name,
-      defaultBranch: repo.default_branch,
-      year: now.getFullYear(),
-      month: now.getMonth() + 1,
-    });
+    const prep = await prepareRelease(repo);
     renderPrep(repo, prep);
   } catch (e) {
     $("rel-loading").textContent = String(e);
@@ -1189,7 +1196,9 @@ interface TrainEntry {
   level: BumpLevel;
   include: boolean;
   state: TrainState;
+  /// A word for the state column; anything longer goes in `error`.
   note: string;
+  error: string | null;
   url: string | null;
 }
 
@@ -1211,6 +1220,7 @@ async function openTrain() {
     include: true,
     state: "queued",
     note: "queued",
+    error: null,
     url: null,
   }));
   trainRunning = false;
@@ -1227,16 +1237,13 @@ async function openTrain() {
   await Promise.all(
     train.map(async (entry) => {
       try {
-        entry.prep = await invoke<ReleasePrep>("prepare_release", {
-          owner: entry.repo.owner.login,
-          repo: entry.repo.name,
-          defaultBranch: entry.repo.default_branch,
-        });
+        entry.prep = await prepareRelease(entry.repo);
         entry.level = entry.prep.suggestion.level;
       } catch (e) {
         entry.include = false;
         entry.state = "skipped";
-        entry.note = String(e);
+        entry.note = "skipped";
+        entry.error = String(e);
       }
     })
   );
@@ -1369,7 +1376,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
 
   const state = document.createElement("span");
   state.className = "state";
-  state.title = entry.note;
+  state.title = entry.error ?? entry.note;
   if (entry.state === "done" && entry.url) {
     const link = document.createElement("a");
     link.href = "#";
@@ -1389,6 +1396,12 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
   }
 
   li.append(grip, tick, name, segs, next, state);
+  if (entry.error) {
+    const msg = document.createElement("p");
+    msg.className = "train-msg";
+    msg.textContent = entry.error;
+    li.append(msg);
+  }
   return li;
 }
 
