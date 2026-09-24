@@ -4564,8 +4564,9 @@ checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
 
 [[package]]
 name = "unshipped"
-version = "0.23.2"
+version = "0.23.3"
 dependencies = [
+ "block2",
  "futures",
  "keyring",
  "objc2",
