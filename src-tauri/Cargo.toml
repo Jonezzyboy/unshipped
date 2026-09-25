@@ -1,6 +1,6 @@
 [package]
 name = "unshipped"
-version = "0.23.3"
+version = "0.23.4"
 description = "Desktop app showing which GitHub repos have commits waiting on a release"
 authors = ["Alan Jones"]
 edition = "2021"

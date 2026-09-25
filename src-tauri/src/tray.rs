@@ -2,6 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::utils::config::WindowEffectsConfig;
+use tauri::window::{Effect, EffectState};
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewUrl,
     WebviewWindow, WebviewWindowBuilder, Wry,
@@ -15,8 +17,12 @@ const TRAY_ICON: &[u8] = include_bytes!("../icons/tray.png");
 
 const PANEL_WIDTH: f64 = 360.0;
 const PANEL_GAP: f64 = 6.0;
+/// Keep in sync with `.panel`'s border-radius in styles.css.
+const PANEL_RADIUS: f64 = 16.0;
 
 static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
+
+struct TrayMenu(Menu<Wry>);
 
 pub fn apply(app: &AppHandle, enabled: bool, title: String) -> Result<(), String> {
     if !enabled {
@@ -29,12 +35,10 @@ pub fn apply(app: &AppHandle, enabled: bool, title: String) -> Result<(), String
         return tray.set_title(Some(title)).map_err(|e| e.to_string());
     }
 
-    // The list lives in the panel now; the menu is the right-click fallback,
-    // so it never changes and is built once.
-    let menu = right_click_menu(app)?;
+    // An item that owns a menu opens it on every click from macOS 27, so it
+    // only borrows the menu for as long as a right click has it open.
+    app.manage(TrayMenu(right_click_menu(app)?));
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
-        .menu(&menu)
-        .show_menu_on_left_click(false)
         .title(title)
         .tooltip("Unshipped")
         .on_menu_event(on_menu_event)
@@ -53,6 +57,7 @@ pub fn apply(app: &AppHandle, enabled: bool, title: String) -> Result<(), String
     }
     builder.build(app).map_err(|e| e.to_string())?;
     hold_highlight(app);
+    route_button_action(app);
     Ok(())
 }
 
@@ -77,23 +82,113 @@ fn on_menu_event(app: &AppHandle, event: MenuEvent) {
 }
 
 fn on_tray_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
+    // Down, as a native menu opens: the flag has to be up before mouse-up
+    // tries to clear the highlight.
     if let TrayIconEvent::Click {
-        button: MouseButton::Left,
-        // Down, as a native menu opens: the flag has to be up before mouse-up
-        // tries to clear the highlight.
+        button,
         button_state: MouseButtonState::Down,
         rect,
         ..
     } = event
     {
-        let app = tray.app_handle();
-        match app.get_webview_window(PANEL_ID) {
-            Some(panel) if panel.is_visible().unwrap_or(false) => hide_panel(app),
-            _ => {
-                let _ = show_panel(app, rect);
-            }
+        on_click(tray, button == MouseButton::Right, rect);
+    }
+}
+
+fn on_click(tray: &tauri::tray::TrayIcon, right: bool, rect: tauri::Rect) {
+    let app = tray.app_handle();
+    if right {
+        hide_panel(app);
+        pop_menu(tray);
+        return;
+    }
+    match app.get_webview_window(PANEL_ID) {
+        Some(panel) if panel.is_visible().unwrap_or(false) => hide_panel(app),
+        _ => {
+            let _ = show_panel(app, rect);
         }
     }
+}
+
+/// From macOS 27 the menu bar draws status items out of process, so the view
+/// tray-icon lays over the button never sees a mouse event. The button's own
+/// action still fires; on earlier releases that view swallows the click first,
+/// so only one of the two routes ever reaches `on_click`.
+#[cfg(target_os = "macos")]
+fn route_button_action(app: &AppHandle) {
+    use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, NSObject, Sel};
+    use objc2::ClassType;
+    use objc2_app_kit::{NSApplication, NSEventMask, NSEventModifierFlags, NSEventType};
+    use std::sync::OnceLock;
+
+    static APP: OnceLock<AppHandle> = OnceLock::new();
+    static CLASS: OnceLock<Option<&'static AnyClass>> = OnceLock::new();
+
+    unsafe extern "C-unwind" fn clicked(_: &AnyObject, _: Sel, _: *mut AnyObject) {
+        let (Some(app), Some(mtm)) = (APP.get(), objc2_foundation::MainThreadMarker::new())
+        else {
+            return;
+        };
+        let Some(tray) = app.tray_by_id(TRAY_ID) else {
+            return;
+        };
+        let right = NSApplication::sharedApplication(mtm)
+            .currentEvent()
+            .is_some_and(|e| {
+                e.r#type() == NSEventType::RightMouseDown
+                    || e.modifierFlags().contains(NSEventModifierFlags::Control)
+            });
+        if let Ok(Some(rect)) = tray.rect() {
+            on_click(&tray, right, rect);
+        }
+    }
+
+    let _ = APP.set(app.clone());
+    let Some(class) = *CLASS.get_or_init(|| {
+        let mut builder = ClassBuilder::new(c"UnshippedStatusItemTarget", NSObject::class())?;
+        unsafe {
+            builder.add_method(
+                objc2::sel!(clicked:),
+                clicked as unsafe extern "C-unwind" fn(_, _, _),
+            );
+        }
+        Some(builder.register())
+    }) else {
+        return;
+    };
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    let _ = tray.with_inner_tray_icon(move |inner| {
+        let Some(mtm) = objc2_foundation::MainThreadMarker::new() else {
+            return;
+        };
+        let Some(button) = inner.ns_status_item().and_then(|item| item.button(mtm)) else {
+            return;
+        };
+        unsafe {
+            // Leaked: a control holds its target weakly, and the item lives
+            // as long as the app.
+            let target: *mut AnyObject = objc2::msg_send![class, new];
+            let _: () = objc2::msg_send![&*button, setTarget: target];
+            let _: () = objc2::msg_send![&*button, setAction: objc2::sel!(clicked:)];
+            let mask = NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown;
+            let _: isize = objc2::msg_send![&*button, sendActionOn: mask];
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn route_button_action(_app: &AppHandle) {}
+
+/// The menu tracks modally, so it is attached only for as long as it is open.
+fn pop_menu(tray: &tauri::tray::TrayIcon) {
+    let menu = tray.app_handle().state::<TrayMenu>().0.clone();
+    if tray.set_menu(Some(menu)).is_err() {
+        return;
+    }
+    let _ = tray.with_inner_tray_icon(|inner| inner.show_menu());
+    let _ = tray.set_menu(None::<Menu<Wry>>);
 }
 
 fn panel(app: &AppHandle) -> Result<WebviewWindow, String> {
@@ -108,6 +203,14 @@ fn panel(app: &AppHandle) -> Result<WebviewWindow, String> {
         .always_on_top(true)
         .skip_taskbar(true)
         .transparent(true)
+        // Active, since the app never activates and the material would
+        // otherwise always render in its inactive, unblurred state.
+        .effects(WindowEffectsConfig {
+            effects: vec![Effect::Popover],
+            state: Some(EffectState::Active),
+            radius: Some(PANEL_RADIUS),
+            color: None,
+        })
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;

@@ -1105,35 +1105,45 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
   user-select: none;
 }
 .panel {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  /* Tinted rather than opaque: the window's own blur material shows through. */
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--text) 18%, transparent);
   overflow: hidden;
+  padding-block: 5px;
 }
 .panel-head {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 0.4rem 0.5rem;
-  padding: 0.7rem 0.9rem 0.6rem;
-  border-bottom: 1px solid var(--line);
+  gap: 0.3rem 0.5rem;
+  padding: 0.55rem 0.9rem 0.6rem;
 }
-.panel-head .wordmark { font-size: 0.95rem; }
+.panel-head .wordmark { font-size: 0.95rem; font-weight: 600; }
 .panel-checked { color: var(--muted); font-size: 0.78rem; align-self: center; }
 .panel-summary { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 0.82rem; }
+.panel-head::after,
+.panel-foot::before {
+  content: "";
+  grid-column: 1 / -1;
+  height: 1px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+.panel-head::after { margin-top: 0.35rem; }
 .panel-section {
-  padding: 0.55rem 0.9rem 0.2rem;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  padding: 0.5rem 0.9rem 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--muted);
 }
 .panel-row {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.35rem 0.9rem;
+  margin-inline: 5px;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
 }
-.panel-row:hover { background: var(--surface-2); }
+.panel-row:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
 .panel-name {
   flex: 1;
   min-width: 0;
@@ -1145,7 +1155,7 @@ body[data-selecting="on"] .ledger { margin-bottom: 5.5rem; }
 .panel-name .owner { color: var(--muted); }
 .panel-row .flag-mark { display: grid; place-items: center; color: var(--lamp); flex-shrink: 0; }
 .panel-row .lamp { font-size: 0.78rem; padding: 0.1em 0.6em; }
-.panel-row button { font-size: 0.78rem; padding: 0.2em 0.6em; }
+.panel-row button { font-size: 0.78rem; padding: 0.2em 0.6em; border-radius: 999px; }
 .panel-more { padding: 0.2rem 0.9rem 0.5rem; color: var(--muted); font-size: 0.78rem; }
 .panel-when { color: var(--muted); font-size: 0.78rem; flex-shrink: 0; }
 .panel-tag {
@@ -1158,28 +1168,32 @@ a.panel-tag { color: var(--lamp); text-decoration: none; }
 a.panel-tag:hover { text-decoration: underline; }
 .panel-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.9rem;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
+  gap: 0.2rem;
+  padding: 0 5px;
+}
+.panel-foot::before {
+  flex-basis: calc(100% - 1.2rem);
+  margin: 0.35rem 0.6rem 0.3rem;
 }
 .panel-link {
   border: none;
   background: none;
-  padding: 0.2em 0;
+  padding: 0.3rem 0.6rem;
+  border-radius: 8px;
   font-size: 0.85rem;
 }
-.panel-link:hover { color: var(--lamp); }
-.panel-foot .icon-btn { width: 28px; height: 28px; }
+.panel-link:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
+.panel-foot .icon-btn { width: 28px; height: 28px; border-radius: 8px; }
+.panel-foot .icon-btn:hover { background: color-mix(in srgb, var(--text) 10%, transparent); }
 #panel-open { flex: 1; text-align: left; }
 /* Quitting is the one thing here that cannot be undone: it sits behind a
    divider, away from the buttons reached for by habit. */
 .panel-sep {
   width: 1px;
-  align-self: stretch;
-  margin-block: -0.5rem;
-  background: var(--line);
+  height: 1rem;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
 }
 #panel-quit { color: var(--muted); font-size: 0.8rem; }
 #panel-quit:hover { color: var(--err); }
