@@ -233,6 +233,35 @@
               <div class="facts-head">Repos counted their own way</div>
               <ul id="version-rules" class="overrides"></ul>
               <p class="hint" id="version-rules-note"></p>
+
+              <div class="facts-head">Decision model</div>
+              <label class="check">
+                <input type="checkbox" id="judge-enabled" />
+                Let a local model read the commits
+              </label>
+              <p class="hint field-note">
+                For repos whose commits carry no <span class="mono">feat:</span> or
+                <span class="mono">BREAKING CHANGE</span> markers. A decision model served by
+                <a href="#" id="judge-ollama-link">Ollama</a> judges major, minor or patch, and raises the
+                suggestion when it is at least 80% sure. It never lowers what the markers say.
+              </p>
+              <div id="judge-fields" class="sub-block" hidden>
+                <div class="two-col">
+                  <label class="field">
+                    <span>Ollama server</span>
+                    <input id="judge-url" class="mono" placeholder="http://localhost:11434" spellcheck="false" autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span>Model</span>
+                    <input id="judge-model" class="mono" placeholder="nimble" spellcheck="false" autocomplete="off" />
+                  </label>
+                </div>
+                <p class="hint">Needs a model that serves <span class="mono">/v1/systemone</span> — <span class="mono">ollama pull nimble</span>.</p>
+                <div class="check-row">
+                  <button type="button" id="btn-judge-check">Check model</button>
+                  <span id="judge-status" class="hint"></span>
+                </div>
+              </div>
             </section>
 
             <section id="panel-shortcuts" class="settings-panel" hidden>
@@ -460,6 +489,7 @@
             </div>
           </div>
           <div id="bump-choices" class="bumps" role="radiogroup" aria-label="Version bump"></div>
+          <p id="rel-judge" class="hint judge-line" hidden></p>
           <label class="field">
             <span>Tag <em id="rel-tag-note"></em></span>
             <input id="rel-tag" class="mono tag-field" spellcheck="false" />

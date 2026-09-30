@@ -48,6 +48,9 @@ interface ReleasePrep {
   rule: VersionRule | null;
 }
 interface Notes { name: string; body: string }
+interface Verdict {
+  level: BumpLevel; probability: number; probabilities: Record<string, number>; suggested: BumpLevel;
+}
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -869,6 +872,8 @@ $<HTMLDialogElement>("rules-dialog").addEventListener("close", () => {
 // --- Release dialog ---
 
 let currentBump: { repo: Repo; prep: ReleasePrep; tag: string } | null = null;
+/// Once someone clicks a level, a late verdict only relabels the suggestion.
+let bumpPicked = false;
 
 /// The only caller of prepare_release. Its calendar month comes from here
 /// rather than the clock in Rust: a calendar tag is named for the month the
@@ -928,20 +933,12 @@ function renderPrep(repo: Repo, prep: ReleasePrep) {
   $("bump-choices").hidden = !semver;
   $("rel-keep-wrap").hidden = true;
 
-  const choices = $("bump-choices");
-  choices.innerHTML = "";
+  $("rel-judge").hidden = true;
   if (semver) {
-    for (const level of ["major", "minor", "patch"] as BumpLevel[]) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "bump";
-      btn.setAttribute("role", "radio");
-      const suggested = level === prep.suggestion.level;
-      btn.innerHTML = `<span class="kind">${level}${suggested ? ' <span class="suggested">suggested</span>' : ""}</span><span class="ver">${prep.suggestion[level]}</span>`;
-      btn.onclick = () => selectBump(repo, prep, level);
-      choices.append(btn);
-    }
+    bumpPicked = false;
+    renderBumps(repo, prep, prep.suggestion.level);
     selectBump(repo, prep, prep.suggestion.level);
+    judgeDialog(repo, prep);
     return;
   }
 
@@ -987,6 +984,73 @@ async function syncKeepShape(repo: Repo, tag: string) {
   wrap.hidden = false;
   box.dataset.rule = rule;
   $("rel-keep-label").textContent = `Count ${repo.name} by ${ruleName(rule).toLowerCase()} month from now on`;
+}
+
+function renderBumps(repo: Repo, prep: ReleasePrep, suggestedLevel: BumpLevel) {
+  const choices = $("bump-choices");
+  const selected = choices.querySelector('.bump[aria-checked="true"]');
+  const selectedIndex = selected ? [...choices.children].indexOf(selected) : -1;
+  choices.innerHTML = "";
+  LEVELS.forEach((level, i) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "bump";
+    btn.setAttribute("role", "radio");
+    btn.setAttribute("aria-checked", String(i === selectedIndex));
+    const suggested = level === suggestedLevel;
+    btn.innerHTML = `<span class="kind">${level}${suggested ? ' <span class="suggested">suggested</span>' : ""}</span><span class="ver">${prep.suggestion[level]}</span>`;
+    btn.onclick = () => {
+      bumpPicked = true;
+      selectBump(repo, prep, level);
+    };
+    choices.append(btn);
+  });
+}
+
+function judgeBump(prep: ReleasePrep): Promise<Verdict | null> {
+  return invoke<Verdict | null>("judge_bump", {
+    currentTag: prep.current_tag,
+    commits: prep.commits,
+    level: prep.suggestion.level,
+  });
+}
+
+const pct = (p: number) => `${Math.round(p * 100)}%`;
+
+const modelName = () => judge.model || "nimble";
+
+function verdictText(v: Verdict, markers: BumpLevel): string {
+  const sure = `${pct(v.probability)} sure`;
+  if (v.level === markers) return `${modelName()} agrees — ${sure}.`;
+  if (v.suggested === v.level) return `${modelName()} reads this as ${v.level} — ${sure}.`;
+  if (LEVELS.indexOf(v.level) > LEVELS.indexOf(markers)) {
+    return `The commit markers say ${markers}; ${modelName()} reads ${v.level}, ${sure}.`;
+  }
+  return `${modelName()} leans ${v.level}, ${sure} — not enough to move the suggestion.`;
+}
+
+async function judgeDialog(repo: Repo, prep: ReleasePrep) {
+  if (!judge.enabled || !prep.commits.length) return;
+  const line = $("rel-judge");
+  line.hidden = false;
+  line.textContent = `${modelName()} is reading the commits…`;
+  let v: Verdict | null;
+  try {
+    v = await judgeBump(prep);
+  } catch (e) {
+    if (currentBump?.prep !== prep) return;
+    line.textContent = String(e);
+    return;
+  }
+  if (currentBump?.prep !== prep) return;
+  if (!v) {
+    line.hidden = true;
+    return;
+  }
+  line.textContent = verdictText(v, prep.suggestion.level);
+  if (v.suggested === prep.suggestion.level) return;
+  renderBumps(repo, prep, v.suggested);
+  if (!bumpPicked) selectBump(repo, prep, v.suggested);
 }
 
 function selectBump(repo: Repo, prep: ReleasePrep, level: BumpLevel) {
@@ -1194,6 +1258,9 @@ interface TrainEntry {
   repo: Repo;
   prep: ReleasePrep | null;
   level: BumpLevel;
+  /// Set once someone picks a level, so a late verdict leaves it alone.
+  picked: boolean;
+  verdict: Verdict | null;
   include: boolean;
   state: TrainState;
   /// A word for the state column; anything longer goes in `error`.
@@ -1217,6 +1284,8 @@ async function openTrain() {
     repo,
     prep: null,
     level: "patch",
+    picked: false,
+    verdict: null,
     include: true,
     state: "queued",
     note: "queued",
@@ -1251,6 +1320,22 @@ async function openTrain() {
   $("train-loading").hidden = true;
   $("train-body").hidden = false;
   renderTrain();
+  judgeTrain();
+}
+
+async function judgeTrain() {
+  if (!judge.enabled) return;
+  const opened = train;
+  await Promise.all(
+    opened.map(async (entry) => {
+      if (!entry.prep || entry.prep.suggestion.basis !== "semver" || !entry.prep.commits.length) return;
+      const v = await judgeBump(entry.prep).catch(() => null);
+      if (!v || train !== opened || trainLocked()) return;
+      entry.verdict = v;
+      if (!entry.picked) entry.level = v.suggested;
+      renderTrain();
+    })
+  );
 }
 
 /// Pointer events rather than HTML5 drag and drop: WebKit will not start a drag
@@ -1348,6 +1433,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
 
   const segs = document.createElement("span");
   segs.className = "segs";
+  if (entry.verdict && entry.prep) segs.title = verdictText(entry.verdict, entry.prep.suggestion.level);
   for (const level of LEVELS) {
     const seg = document.createElement("button");
     seg.type = "button";
@@ -1358,6 +1444,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
     seg.disabled = trainLocked() || !entry.prep;
     seg.onclick = () => {
       entry.level = level;
+      entry.picked = true;
       renderTrain();
     };
     segs.append(seg);
@@ -1621,7 +1708,12 @@ interface Settings {
   repo_rules: Record<string, RepoRule>;
   start_tag: string;
   repo_rules_version: Record<string, VersionRule>;
+  judge_enabled: boolean;
+  judge_url: string;
+  judge_model: string;
 }
+
+let judge = { enabled: false, url: "", model: "" };
 
 let panelSections: PanelSections = { pinned: true, waiting: true, recent: true };
 interface Unlinked { name: string; repo_urls: string[] }
@@ -1676,6 +1768,9 @@ function currentSettings(): Settings {
     repo_rules: repoRules,
     start_tag: startTag.trim() || DEFAULT_START_TAG,
     repo_rules_version: repoVersionRules,
+    judge_enabled: judge.enabled,
+    judge_url: judge.url,
+    judge_model: judge.model,
   };
 }
 
@@ -1730,6 +1825,11 @@ function renderOverrides() {
 
 function renderVersioningPanel() {
   $<HTMLInputElement>("start-tag").value = startTag;
+  $<HTMLInputElement>("judge-enabled").checked = judge.enabled;
+  $<HTMLInputElement>("judge-url").value = judge.url;
+  $<HTMLInputElement>("judge-model").value = judge.model;
+  $("judge-fields").hidden = !judge.enabled;
+  $("judge-status").textContent = "";
 
   const list = $("version-rules");
   list.innerHTML = "";
@@ -2058,6 +2158,37 @@ for (const key of ["pinned", "waiting", "recent"] as const) {
   };
 }
 $("btn-argo-check").onclick = runCheck;
+
+$<HTMLInputElement>("judge-enabled").onchange = (e) => {
+  judge.enabled = (e.target as HTMLInputElement).checked;
+  $("judge-fields").hidden = !judge.enabled;
+  saveSettings().catch(() => {});
+};
+for (const [id, key] of [["judge-url", "url"], ["judge-model", "model"]] as const) {
+  $<HTMLInputElement>(id).onchange = (e) => {
+    judge[key] = (e.target as HTMLInputElement).value.trim();
+    saveSettings().catch(() => {});
+  };
+}
+$("judge-ollama-link").onclick = (e) => {
+  e.preventDefault();
+  openUrl("https://ollama.com/library/nimble");
+};
+$("btn-judge-check").onclick = async () => {
+  const btn = $<HTMLButtonElement>("btn-judge-check");
+  const status = $("judge-status");
+  btn.disabled = true;
+  status.textContent = "Asking the model… a cold one takes a few seconds to load.";
+  try {
+    await saveSettings();
+    const v = await invoke<Verdict>("judge_check");
+    status.textContent = `Working — it read a sample release as ${v.level}, ${pct(v.probability)} sure.`;
+  } catch (e) {
+    status.textContent = String(e);
+  } finally {
+    btn.disabled = false;
+  }
+};
 $("btn-argo-login").onclick = () =>
   connect(() =>
     invoke<ArgoCheck>("argo_login", {
@@ -2297,6 +2428,7 @@ invoke<Settings>("get_settings").then((s) => {
   repoRules = s.repo_rules ?? {};
   startTag = s.start_tag || DEFAULT_START_TAG;
   repoVersionRules = s.repo_rules_version ?? {};
+  judge = { enabled: s.judge_enabled, url: s.judge_url ?? "", model: s.judge_model ?? "" };
   panelSections = { ...panelSections, ...s.panel_sections };
   hideShipped = s.hide_shipped;
   hideNoReleases = s.hide_no_releases;

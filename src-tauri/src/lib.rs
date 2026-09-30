@@ -3,6 +3,7 @@ mod auth;
 mod demo;
 mod github;
 mod iap;
+mod judge;
 mod settings;
 mod store;
 mod tray;
@@ -309,6 +310,30 @@ async fn prepare_release(
     })
 }
 
+fn judge_conn(s: &settings::Settings) -> judge::Conn {
+    judge::Conn::new(&s.judge_url, &s.judge_model)
+}
+
+/// None when no decision model is switched on, so the dialog keeps the markers' pick.
+#[tauri::command]
+async fn judge_bump(
+    app: tauri::AppHandle,
+    current_tag: Option<String>,
+    commits: Vec<String>,
+    level: version::Bump,
+) -> Result<Option<judge::Verdict>, String> {
+    let s = settings::load(&app);
+    if !s.judge_enabled || commits.is_empty() {
+        return Ok(None);
+    }
+    judge::judge(&judge_conn(&s), current_tag.as_deref(), &commits, level).await.map(Some)
+}
+
+#[tauri::command]
+async fn judge_check(app: tauri::AppHandle) -> Result<judge::Verdict, String> {
+    judge::check(&judge_conn(&settings::load(&app))).await
+}
+
 #[derive(Serialize)]
 struct Notes {
     name: String,
@@ -385,6 +410,8 @@ pub fn run() {
             repo_status,
             prepare_release,
             rule_for_tag,
+            judge_bump,
+            judge_check,
             generate_notes,
             create_release,
             set_menu_bar,
