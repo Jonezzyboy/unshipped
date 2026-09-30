@@ -41,6 +41,13 @@ pub struct Settings {
     /// Repos that count by a rule of their own, keyed by full name.
     #[serde(default)]
     pub repo_rules_version: BTreeMap<String, crate::version::Rule>,
+    /// A local decision model that may raise the suggested bump.
+    #[serde(default)]
+    pub judge_enabled: bool,
+    #[serde(default)]
+    pub judge_url: String,
+    #[serde(default)]
+    pub judge_model: String,
 }
 
 /// Which sections the menu bar panel shows.
@@ -143,6 +150,9 @@ impl Default for Settings {
             repo_rules: BTreeMap::new(),
             start_tag: default_start_tag(),
             repo_rules_version: BTreeMap::new(),
+            judge_enabled: false,
+            judge_url: String::new(),
+            judge_model: String::new(),
         }
     }
 }
