@@ -713,8 +713,15 @@ dialog::backdrop { background: rgb(6 8 11 / 0.65); }
   font-size: 0.82rem;
 }
 /* --- Shipping rules --- */
-.repo-row[data-flagged] { background: color-mix(in srgb, var(--lamp) 5%, transparent); }
-.repo-row[data-flagged]:hover { background: color-mix(in srgb, var(--lamp) 10%, transparent); }
+/* Hot hue and right-edge bar keep flags distinct from the landed highlight. */
+.repo-row[data-flagged] {
+  background: color-mix(in srgb, var(--lamp-hot) 6%, transparent);
+  box-shadow: inset -2px 0 0 color-mix(in srgb, var(--lamp-hot) 60%, transparent);
+}
+.repo-row[data-flagged]:hover { background: color-mix(in srgb, var(--lamp-hot) 11%, transparent); }
+.repo-row[data-flagged][data-landed] {
+  box-shadow: inset 2px 0 0 var(--lamp), inset -2px 0 0 color-mix(in srgb, var(--lamp-hot) 60%, transparent);
+}
 .repo-row .actions .flag {
   display: grid;
   place-items: center;

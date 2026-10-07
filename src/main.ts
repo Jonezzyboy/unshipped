@@ -558,7 +558,12 @@ function buildRow(repo: Repo): HTMLElement {
   li.className = "repo-row";
   if (flagsFor(repo).length) li.dataset.flagged = "";
   const landed = landedAt.get(repo.full_name);
-  if (landed !== undefined && Date.now() - landed < LANDED_MS) li.dataset.landed = "";
+  const heldFor = landed === undefined ? 0 : LANDED_MS - (Date.now() - landed);
+  if (heldFor > 0) {
+    li.dataset.landed = "";
+    // Nothing guarantees another render after the last status of a sweep lands.
+    setTimeout(() => delete li.dataset.landed, heldFor);
+  }
   li.append(
     rowSelect(repo),
     rowName(repo),
