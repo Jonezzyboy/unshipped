@@ -231,6 +231,9 @@ fn panel(app: &AppHandle) -> Result<WebviewWindow, String> {
         .always_on_top(true)
         .skip_taskbar(true)
         .transparent(true)
+        // The panel never activates the app, so with no other window up it is
+        // never key, and a webview that refuses first mouse drops every click.
+        .accept_first_mouse(true)
         // Active, since the app never activates and the material would
         // otherwise always render in its inactive, unblurred state.
         .effects(WindowEffectsConfig {
