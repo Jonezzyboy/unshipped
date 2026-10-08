@@ -15,6 +15,7 @@ import {
   type RepoRule,
   type Rules,
 } from "./rules";
+import { bellSvg, checkedAgo, readCache, relAge, repoLabel } from "./shared";
 
 interface User { login: string; avatar_url: string }
 interface AuthStatus { user: User | null; error: string | null }
@@ -117,15 +118,6 @@ const cacheKey = (k: string) => (demoMode ? `demo:${k}` : k);
 
 interface CachedStatus { pushed_at: string | null; status: RepoStatus }
 
-function readCache<T>(key: string): T | null {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-}
-
 let statusCache: Record<string, CachedStatus> = {};
 
 function saveStatusCache() {
@@ -156,15 +148,9 @@ function seedFromCache(repos: Repo[]): Repo[] {
 
 let refreshing = false;
 
-// Mirrors the tray panel's wording so the two windows read the same.
 function checkedLabel(): string {
-  const iso = localStorage.getItem(cacheKey(CHECKED_KEY));
-  if (!iso) return "Never checked";
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return "Checked just now";
-  if (mins < 60) return `Checked ${mins} min ago`;
-  const hours = Math.floor(mins / 60);
-  return hours < 24 ? `Checked ${hours}h ago` : "Checked a while ago";
+  const ago = checkedAgo(localStorage.getItem(cacheKey(CHECKED_KEY)));
+  return ago ? `Checked ${ago}` : "Never checked";
 }
 
 function setRefreshLabel(text: string) {
@@ -211,12 +197,13 @@ async function loadRepos() {
     saveStatusCache();
     // The panel is a separate window with no state of its own; it reads this.
     localStorage.setItem(cacheKey(CHECKED_KEY), new Date().toISOString());
-    emit("ledger-updated");
     notifyFlagged();
   } catch (e) {
     $("repo-summary").textContent = String(e);
   } finally {
     setRefreshing(false);
+    // A failed sweep still has to tell the panel, or its spinner never stops.
+    emit("ledger-updated");
   }
 }
 
@@ -343,15 +330,6 @@ function lampText(status: RepoStatus | undefined): string {
   if (status.ahead_by < 0) return "error";
   if (status.ahead_by === 0) return "shipped";
   return `${status.ahead_by} waiting`;
-}
-
-function relAge(iso: string | null): string {
-  if (!iso) return "";
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (days < 1) return "today";
-  if (days < 30) return `${days}d ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
 }
 
 function matchesOwner(repo: Repo): boolean {
@@ -556,7 +534,8 @@ function resetAndRender() {
 function buildRow(repo: Repo): HTMLElement {
   const li = document.createElement("li");
   li.className = "repo-row";
-  if (flagsFor(repo).length) li.dataset.flagged = "";
+  const reasons = flagsFor(repo);
+  if (reasons.length) li.dataset.flagged = "";
   const landed = landedAt.get(repo.full_name);
   const heldFor = landed === undefined ? 0 : LANDED_MS - (Date.now() - landed);
   if (heldFor > 0) {
@@ -571,7 +550,7 @@ function buildRow(repo: Repo): HTMLElement {
     rowTag(repo),
     rowAge(repo),
     rowDeploy(repo),
-    rowActions(repo),
+    rowActions(repo, reasons),
   );
   return li;
 }
@@ -665,13 +644,10 @@ function renderRepos() {
 function rowName(repo: Repo): HTMLElement {
   const el = document.createElement("span");
   el.className = "repo-name";
-  const owner = document.createElement("span");
-  owner.className = "owner";
-  owner.textContent = `${repo.owner.login} / `;
   const link = document.createElement("a");
   link.href = "#";
   link.title = `Open ${repo.full_name} on GitHub`;
-  link.append(owner, document.createTextNode(repo.name));
+  link.append(...repoLabel(repo));
   link.onclick = (e) => {
     e.preventDefault();
     openUrl(repo.html_url);
@@ -775,11 +751,7 @@ const PIN_SVG =
   '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">' +
   '<path d="M4.456.734a1.75 1.75 0 0 1 2.826.504l.613 1.327a3.08 3.08 0 0 0 2.084 1.707l2.454.584c1.332.317 1.8 1.972.832 2.94L11.06 10l3.72 3.72a.75.75 0 1 1-1.061 1.06L10 11.06l-2.204 2.205c-.968.968-2.623.5-2.94-.832l-.584-2.454a3.08 3.08 0 0 0-1.707-2.084l-1.327-.613a1.75 1.75 0 0 1-.504-2.826L4.456.734Z"/></svg>';
 
-const BELL_SVG =
-  '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">' +
-  '<path d="M8 16a2 2 0 0 0 1.985-1.75c.017-.137-.097-.25-.235-.25h-3.5c-.138 0-.252.113-.235.25A2 2 0 0 0 8 16ZM3 5a5 5 0 0 1 10 0v2.947c0 .05.015.098.042.139l1.703 2.555A1.519 1.519 0 0 1 13.482 13H2.518a1.516 1.516 0 0 1-1.263-2.36l1.703-2.554A.255.255 0 0 0 3 7.947Z"/></svg>';
-
-function rowActions(repo: Repo): HTMLElement {
+function rowActions(repo: Repo, reasons: string[]): HTMLElement {
   const el = document.createElement("span");
   el.className = "actions";
 
@@ -791,10 +763,9 @@ function rowActions(repo: Repo): HTMLElement {
     el.append(btn);
   }
 
-  const reasons = flagsFor(repo);
   const flag = document.createElement("button");
   flag.className = "flag";
-  flag.innerHTML = BELL_SVG;
+  flag.innerHTML = bellSvg(14);
   flag.title = reasons.length ? `Flagged — ${reasons.join(" · ")}` : "Rules for this repo…";
   flag.setAttribute("aria-pressed", String(reasons.length > 0));
   flag.onclick = () => openRepoRules(repo);
@@ -905,7 +876,8 @@ async function openReleaseDialog(repo: Repo) {
   const createBtn = $<HTMLButtonElement>("btn-create-release");
   createBtn.disabled = false;
   createBtn.textContent = "Create release";
-  dialog.showModal();
+  // The panel can ask for a release while this dialog is already up.
+  if (!dialog.open) dialog.showModal();
 
   try {
     const prep = await prepareRelease(repo);
@@ -1061,8 +1033,7 @@ async function judgeDialog(repo: Repo, prep: ReleasePrep) {
 function selectBump(repo: Repo, prep: ReleasePrep, level: BumpLevel) {
   const tag = prep.suggestion[level];
   const buttons = [...$("bump-choices").querySelectorAll<HTMLButtonElement>(".bump")];
-  const levels: BumpLevel[] = ["major", "minor", "patch"];
-  buttons.forEach((b, i) => b.setAttribute("aria-checked", String(levels[i] === level)));
+  buttons.forEach((b, i) => b.setAttribute("aria-checked", String(LEVELS[i] === level)));
   setTag(repo, prep, tag);
 }
 
@@ -1431,10 +1402,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
 
   const name = document.createElement("span");
   name.className = "repo";
-  const owner = document.createElement("span");
-  owner.className = "owner";
-  owner.textContent = `${entry.repo.owner.login} / `;
-  name.append(owner, document.createTextNode(entry.repo.name));
+  name.append(...repoLabel(entry.repo));
 
   const segs = document.createElement("span");
   segs.className = "segs";
@@ -1686,6 +1654,7 @@ function renderThemeOptions() {
       applyTheme(theme.id);
       renderThemeOptions();
       saveSettings();
+      emit("ledger-updated");
     };
     wrap.append(btn);
   }
@@ -1798,6 +1767,23 @@ function saveRules() {
   if (!$("panel-rules").hidden) renderRulesPanel();
 }
 
+function overrideRow(full: string, value: string, valueClass: string, onRemove: () => void): HTMLElement {
+  const li = document.createElement("li");
+  const name = document.createElement("span");
+  name.className = "override-name";
+  name.textContent = full;
+  const val = document.createElement("span");
+  val.className = valueClass;
+  val.textContent = value;
+  const drop = document.createElement("button");
+  drop.type = "button";
+  drop.className = "ghost";
+  drop.textContent = "Remove";
+  drop.onclick = onRemove;
+  li.append(name, val, drop);
+  return li;
+}
+
 function renderOverrides() {
   const list = $("rule-overrides");
   list.innerHTML = "";
@@ -1808,23 +1794,10 @@ function renderOverrides() {
     : "None yet — set one from the bell on any row in the ledger.";
 
   for (const [full, rule] of entries) {
-    const li = document.createElement("li");
-    const name = document.createElement("span");
-    name.className = "override-name";
-    name.textContent = full;
-    const value = document.createElement("span");
-    value.className = "override-value mono";
-    value.textContent = overrideText(rule);
-    const drop = document.createElement("button");
-    drop.type = "button";
-    drop.className = "ghost";
-    drop.textContent = "Remove";
-    drop.onclick = () => {
+    list.append(overrideRow(full, overrideText(rule), "override-value mono", () => {
       delete repoRules[full];
       saveRules();
-    };
-    li.append(name, value, drop);
-    list.append(li);
+    }));
   }
 }
 
@@ -1845,24 +1818,11 @@ function renderVersioningPanel() {
     : "None yet — set when you name a tag yourself in the release dialog.";
 
   for (const [full, rule] of entries) {
-    const li = document.createElement("li");
-    const name = document.createElement("span");
-    name.className = "override-name";
-    name.textContent = full;
-    const value = document.createElement("span");
-    value.className = "override-value";
-    value.textContent = ruleName(rule);
-    const drop = document.createElement("button");
-    drop.type = "button";
-    drop.className = "ghost";
-    drop.textContent = "Remove";
-    drop.onclick = () => {
+    list.append(overrideRow(full, ruleName(rule), "override-value", () => {
       delete repoVersionRules[full];
       saveSettings().catch(() => {});
       renderVersioningPanel();
-    };
-    li.append(name, value, drop);
-    list.append(li);
+    }));
   }
 }
 

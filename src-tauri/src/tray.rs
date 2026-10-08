@@ -1,4 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -21,6 +23,10 @@ const PANEL_GAP: f64 = 6.0;
 const PANEL_RADIUS: f64 = 16.0;
 
 static PANEL_OPEN: AtomicBool = AtomicBool::new(false);
+static PANEL_HIDDEN_AT: Mutex<Option<Instant>> = Mutex::new(None);
+/// A click on the item while the panel is open is also a click outside it,
+/// which hides the panel a moment before the click itself arrives.
+const DISMISS_GRACE: Duration = Duration::from_millis(300);
 
 struct TrayMenu(Menu<Wry>);
 
@@ -58,6 +64,8 @@ pub fn apply(app: &AppHandle, enabled: bool, title: String) -> Result<(), String
     builder.build(app).map_err(|e| e.to_string())?;
     hold_highlight(app);
     route_button_action(app);
+    // Built up front so the first click shows a panel already rendered and sized.
+    panel(app)?;
     Ok(())
 }
 
@@ -91,23 +99,46 @@ fn on_tray_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
         ..
     } = event
     {
-        on_click(tray, button == MouseButton::Right, rect);
+        on_click(tray, button == MouseButton::Right || control_held(), rect);
     }
 }
 
-fn on_click(tray: &tauri::tray::TrayIcon, right: bool, rect: tauri::Rect) {
+fn on_click(tray: &tauri::tray::TrayIcon, secondary: bool, rect: tauri::Rect) {
     let app = tray.app_handle();
-    if right {
+    if secondary {
         hide_panel(app);
         pop_menu(tray);
         return;
     }
-    match app.get_webview_window(PANEL_ID) {
-        Some(panel) if panel.is_visible().unwrap_or(false) => hide_panel(app),
-        _ => {
-            let _ = show_panel(app, rect);
-        }
+    if PANEL_OPEN.load(Ordering::Relaxed) {
+        hide_panel(app);
+    } else if !just_dismissed() {
+        let _ = show_panel(app, rect);
     }
+}
+
+fn just_dismissed() -> bool {
+    PANEL_HIDDEN_AT
+        .lock()
+        .ok()
+        .and_then(|at| *at)
+        .is_some_and(|at| at.elapsed() < DISMISS_GRACE)
+}
+
+#[cfg(target_os = "macos")]
+fn control_held() -> bool {
+    use objc2_app_kit::{NSApplication, NSEventModifierFlags};
+    let Some(mtm) = objc2_foundation::MainThreadMarker::new() else {
+        return false;
+    };
+    NSApplication::sharedApplication(mtm)
+        .currentEvent()
+        .is_some_and(|e| e.modifierFlags().contains(NSEventModifierFlags::Control))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn control_held() -> bool {
+    false
 }
 
 /// From macOS 27 the menu bar draws status items out of process, so the view
@@ -118,7 +149,7 @@ fn on_click(tray: &tauri::tray::TrayIcon, right: bool, rect: tauri::Rect) {
 fn route_button_action(app: &AppHandle) {
     use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, NSObject, Sel};
     use objc2::ClassType;
-    use objc2_app_kit::{NSApplication, NSEventMask, NSEventModifierFlags, NSEventType};
+    use objc2_app_kit::{NSApplication, NSEventMask, NSEventType};
     use std::sync::OnceLock;
 
     static APP: OnceLock<AppHandle> = OnceLock::new();
@@ -134,12 +165,9 @@ fn route_button_action(app: &AppHandle) {
         };
         let right = NSApplication::sharedApplication(mtm)
             .currentEvent()
-            .is_some_and(|e| {
-                e.r#type() == NSEventType::RightMouseDown
-                    || e.modifierFlags().contains(NSEventModifierFlags::Control)
-            });
+            .is_some_and(|e| e.r#type() == NSEventType::RightMouseDown);
         if let Ok(Some(rect)) = tray.rect() {
-            on_click(&tray, right, rect);
+            on_click(&tray, right || control_held(), rect);
         }
     }
 
@@ -351,7 +379,11 @@ fn held_button_class(
 fn hold_highlight(_app: &AppHandle) {}
 
 pub fn hide_panel(app: &AppHandle) {
-    PANEL_OPEN.store(false, Ordering::Relaxed);
+    if PANEL_OPEN.swap(false, Ordering::Relaxed) {
+        if let Ok(mut at) = PANEL_HIDDEN_AT.lock() {
+            *at = Some(Instant::now());
+        }
+    }
     if let Some(panel) = app.get_webview_window(PANEL_ID) {
         let _ = panel.hide();
     }
