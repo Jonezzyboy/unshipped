@@ -128,6 +128,11 @@ fn resize_panel(app: tauri::AppHandle, height: f64) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn hide_panel(app: tauri::AppHandle) {
+    tray::hide_panel(&app);
+}
+
+#[tauri::command]
 fn focus_main(app: tauri::AppHandle) {
     tray::show_main(&app);
 }
@@ -416,6 +421,7 @@ pub fn run() {
             create_release,
             set_menu_bar,
             resize_panel,
+            hide_panel,
             focus_main,
             panel_release,
             panel_refresh,
