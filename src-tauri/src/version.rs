@@ -144,17 +144,23 @@ fn parse_calendar(tag: &str) -> Option<(i32, u32, u32)> {
     Some((year, month, n))
 }
 
+/// The version starts at the first digit run that parses, so a prefix may hold
+/// digits of its own (`k4-app/v1.2.3`).
 fn parse_tag(tag: Option<&str>) -> Option<(String, Version)> {
     let tag = tag?;
-    let stripped = tag.trim_start_matches(|c: char| !c.is_ascii_digit());
-    let prefix = &tag[..tag.len() - stripped.len()];
-    match Version::parse(stripped) {
-        Ok(v) => Some((prefix.into(), v)),
+    let mut prev = None;
+    tag.char_indices().find_map(|(i, c)| {
+        // After a '.' the digits belong to a version already ruled out, so v1.2.3.4 stays unreadable.
+        let starts_run = c.is_ascii_digit() && !prev.is_some_and(|p: char| p == '.' || p.is_ascii_digit());
+        prev = Some(c);
+        if !starts_run {
+            return None;
+        }
+        let rest = &tag[i..];
         // Tolerate two-part tags like v1.2
-        Err(_) => Version::parse(&format!("{stripped}.0"))
-            .ok()
-            .map(|v| (prefix.into(), v)),
-    }
+        let v = Version::parse(rest).or_else(|_| Version::parse(&format!("{rest}.0"))).ok()?;
+        Some((tag[..i].into(), v))
+    })
 }
 
 fn is_breaking(full: &str, first_line: &str) -> bool {
@@ -229,6 +235,8 @@ mod tests {
         assert_eq!(sug(Some("3.0.1"), &[]).patch, "3.0.2");
         assert_eq!(sug(Some("v3.0.1"), &[]).patch, "v3.0.2");
         assert_eq!(sug(Some("app-charge/v1.2.3"), &[]).patch, "app-charge/v1.2.4");
+        assert_eq!(sug(Some("k4-app/v1.2.3"), &[]).patch, "k4-app/v1.2.4");
+        assert_eq!(sug(Some("s3-sync-2/v1.2"), &[]).minor, "s3-sync-2/v1.3.0");
     }
 
     #[test]
@@ -258,6 +266,7 @@ mod tests {
         let s = sug(Some("2026.09"), &[]);
         assert_eq!(s.basis, Basis::Unreadable);
         assert_eq!(s.next, None);
+        assert_eq!(sug(Some("v1.2.3.4"), &[]).basis, Basis::Unreadable);
     }
 
     #[test]

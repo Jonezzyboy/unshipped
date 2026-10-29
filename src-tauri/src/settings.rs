@@ -164,11 +164,15 @@ fn path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 pub fn load(app: &tauri::AppHandle) -> Settings {
-    let mut s: Settings = path(app)
-        .ok()
-        .and_then(|p| fs::read_to_string(p).ok())
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default();
+    let Ok(p) = path(app) else { return Settings::default() };
+    let mut s: Settings = match fs::read_to_string(&p) {
+        Err(_) => Settings::default(),
+        Ok(raw) => serde_json::from_str(&raw).unwrap_or_else(|_| {
+            // The next save overwrites this file, so keep the unreadable copy.
+            let _ = fs::copy(&p, p.with_extension("json.bad"));
+            Settings::default()
+        }),
+    };
     // Rules used to default on, so a pre-schema file's enables were written by
     // the default, not the user — reset them once to make the rules opt-in.
     if s.schema < 1 {
@@ -184,5 +188,9 @@ pub fn save(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
     let mut settings = settings.clone();
     settings.schema = SCHEMA;
     let raw = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    fs::write(path(app)?, raw).map_err(|e| e.to_string())
+    // Write then rename, so a crash mid-write never leaves a half file for load to discard.
+    let path = path(app)?;
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, raw).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
