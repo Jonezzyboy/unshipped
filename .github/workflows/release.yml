@@ -83,7 +83,9 @@ jobs:
           gh release upload "$TAG" "$dmg" --clobber
           echo "sha256=$(shasum -a 256 "$dmg" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
+      # `published` fires for prereleases too; only a full release may move what brew serves.
       - name: Update the Homebrew cask
+        if: ${{ !github.event.release.prerelease }}
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}

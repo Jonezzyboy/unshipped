@@ -1,14 +1,15 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::LazyLock;
 
 const API: &str = "https://api.github.com";
 
-pub fn client() -> reqwest::Client {
+static CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .user_agent("unshipped")
         .build()
         .expect("failed to build http client")
-}
+});
 
 async fn check(resp: reqwest::Response) -> Result<reqwest::Response, String> {
     if resp.status().is_success() {
@@ -23,15 +24,19 @@ async fn check(resp: reqwest::Response) -> Result<reqwest::Response, String> {
     Err(format!("GitHub API error {status}: {msg}"))
 }
 
-async fn get_json<T: for<'de> Deserialize<'de>>(token: &str, url: &str) -> Result<T, String> {
-    let resp = client()
+/// Sends the GET without judging the status, for callers that treat some errors as answers.
+async fn get(token: &str, url: &str) -> Result<reqwest::Response, String> {
+    CLIENT
         .get(url)
         .bearer_auth(token)
         .header("Accept", "application/vnd.github+json")
         .send()
         .await
-        .map_err(|e| e.to_string())?;
-    check(resp).await?.json().await.map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())
+}
+
+async fn get_json<T: for<'de> Deserialize<'de>>(token: &str, url: &str) -> Result<T, String> {
+    check(get(token, url).await?).await?.json().await.map_err(|e| e.to_string())
 }
 
 async fn post_json<T: for<'de> Deserialize<'de>>(
@@ -39,7 +44,7 @@ async fn post_json<T: for<'de> Deserialize<'de>>(
     url: &str,
     body: &serde_json::Value,
 ) -> Result<T, String> {
-    let resp = client()
+    let resp = CLIENT
         .post(url)
         .bearer_auth(token)
         .header("Accept", "application/vnd.github+json")
@@ -112,22 +117,14 @@ pub async fn list_repos(token: &str) -> Result<Vec<Repo>, String> {
              &affiliation=owner,collaborator,organization_member"
         )
     };
-    let mut repos: Vec<Repo> = get_json(token, &page_url(1)).await?;
-    if repos.len() < 100 {
-        return Ok(repos);
-    }
-    // Remaining pages fetched concurrently; page count is unknown, so over-ask
-    // and stop collecting at the first empty page.
-    let rest = futures::future::join_all((2..=10).map(|p| {
-        let url = page_url(p);
-        async move { get_json::<Vec<Repo>>(token, &url).await }
-    }));
-    for batch in rest.await {
-        let batch = batch?;
-        if batch.is_empty() {
+    let mut repos: Vec<Repo> = Vec::new();
+    for page in 1.. {
+        let batch: Vec<Repo> = get_json(token, &page_url(page)).await?;
+        let last = batch.len() < 100;
+        repos.extend(batch);
+        if last {
             break;
         }
-        repos.extend(batch);
     }
     Ok(repos)
 }
@@ -138,13 +135,7 @@ pub async fn latest_release(
     repo: &str,
 ) -> Result<Option<Release>, String> {
     let url = format!("{API}/repos/{owner}/{repo}/releases/latest");
-    let resp = client()
-        .get(&url)
-        .bearer_auth(token)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
+    let resp = get(token, &url).await?;
     if resp.status() == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
     }
@@ -160,9 +151,21 @@ pub async fn compare(
     base: &str,
     head: &str,
 ) -> Result<Comparison, String> {
-    // The compare API caps the commit list at 250, but ahead_by is always exact.
-    let url = format!("{API}/repos/{owner}/{repo}/compare/{base}...{head}?per_page=250");
-    get_json(token, &url).await
+    // Each page holds at most 250 commits, oldest first; ahead_by is always the full count.
+    const PER_PAGE: u64 = 250;
+    let url = |page: u64| {
+        format!("{API}/repos/{owner}/{repo}/compare/{base}...{head}?per_page={PER_PAGE}&page={page}")
+    };
+    let mut cmp: Comparison = get_json(token, &url(1)).await?;
+    // Sequential: a repo this far behind is rare, and a burst of pages risks GitHub's secondary rate limit.
+    for page in 2..=cmp.ahead_by.div_ceil(PER_PAGE) {
+        let next: Comparison = get_json(token, &url(page)).await?;
+        if next.commits.is_empty() {
+            break;
+        }
+        cmp.commits.extend(next.commits);
+    }
+    Ok(cmp)
 }
 
 /// Total commits on a branch, used when a repo has no releases yet.
@@ -173,14 +176,7 @@ pub async fn branch_commit_count(
     branch: &str,
 ) -> Result<u64, String> {
     let url = format!("{API}/repos/{owner}/{repo}/commits?sha={branch}&per_page=1");
-    let resp = client()
-        .get(&url)
-        .bearer_auth(token)
-        .header("Accept", "application/vnd.github+json")
-        .send()
-        .await
-        .map_err(|e| e.to_string())?;
-    let resp = check(resp).await?;
+    let resp = check(get(token, &url).await?).await?;
     // With per_page=1 the last page number in the Link header is the commit count.
     let count = resp
         .headers()

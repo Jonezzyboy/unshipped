@@ -975,7 +975,9 @@ function renderBumps(repo: Repo, prep: ReleasePrep, suggestedLevel: BumpLevel) {
     btn.setAttribute("role", "radio");
     btn.setAttribute("aria-checked", String(i === selectedIndex));
     const suggested = level === suggestedLevel;
-    btn.innerHTML = `<span class="kind">${level}${suggested ? ' <span class="suggested">suggested</span>' : ""}</span><span class="ver">${prep.suggestion[level]}</span>`;
+    btn.innerHTML = `<span class="kind">${level}${suggested ? ' <span class="suggested">suggested</span>' : ""}</span><span class="ver"></span>`;
+    // The tag's prefix comes from whoever tagged the repo, so it never goes through innerHTML.
+    btn.querySelector(".ver")!.textContent = prep.suggestion[level];
     btn.onclick = () => {
       bumpPicked = true;
       selectBump(repo, prep, level);
@@ -1252,6 +1254,12 @@ let trainFinished = false;
 
 const trainLocked = () => trainRunning || trainFinished;
 
+/// The same choice the release dialog makes: levels only mean something for a
+/// semver basis; otherwise the tag is `next`, and none means it must be named by hand.
+function trainTag(prep: ReleasePrep, level: BumpLevel): string | null {
+  return prep.suggestion.basis === "semver" ? prep.suggestion[level] : prep.suggestion.next;
+}
+
 async function openTrain() {
   const repos = trainRepos();
   if (!repos.length) return;
@@ -1284,6 +1292,12 @@ async function openTrain() {
       try {
         entry.prep = await prepareRelease(entry.repo);
         entry.level = entry.prep.suggestion.level;
+        if (!trainTag(entry.prep, entry.level)) {
+          entry.include = false;
+          entry.state = "skipped";
+          entry.note = "skipped";
+          entry.error = `${entry.prep.current_tag} is not a version unshipped can count from — name the tag in the release dialog.`;
+        }
       } catch (e) {
         entry.include = false;
         entry.state = "skipped";
@@ -1393,7 +1407,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
   tick.className = "tick-box";
   tick.innerHTML = TICK_SVG;
   tick.setAttribute("aria-pressed", String(entry.include));
-  tick.disabled = trainLocked() || !entry.prep;
+  tick.disabled = trainLocked() || !entry.prep || !trainTag(entry.prep, entry.level);
   tick.title = entry.include ? "Leave this repo out" : "Put this repo back in";
   tick.onclick = () => {
     entry.include = !entry.include;
@@ -1414,7 +1428,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
     seg.textContent = level;
     seg.setAttribute("role", "radio");
     seg.setAttribute("aria-checked", String(entry.level === level));
-    seg.disabled = trainLocked() || !entry.prep;
+    seg.disabled = trainLocked() || entry.prep?.suggestion.basis !== "semver";
     seg.onclick = () => {
       entry.level = level;
       entry.picked = true;
@@ -1429,7 +1443,7 @@ function trainRow(entry: TrainEntry, index: number): HTMLElement {
     const from = document.createElement("span");
     from.className = "from";
     from.textContent = entry.prep.current_tag ? `${entry.prep.current_tag} → ` : "first → ";
-    next.append(from, document.createTextNode(entry.prep.suggestion[entry.level]));
+    next.append(from, document.createTextNode(trainTag(entry.prep, entry.level) ?? "—"));
   } else {
     next.textContent = "—";
   }
@@ -1508,7 +1522,8 @@ async function runTrain() {
     }
 
     const { repo, prep } = entry;
-    const tag = prep.suggestion[entry.level];
+    const tag = trainTag(prep, entry.level);
+    if (!tag) continue;
     entry.state = "running";
     entry.note = "releasing…";
     renderTrain();
@@ -2062,18 +2077,24 @@ async function connect(action: () => Promise<ArgoCheck>) {
   }
 }
 
-async function openSettings() {
-  resetSteps();
-  showSettingsSection("appearance");
-  showView("view-settings");
-
-  const s = await invoke<Settings>("get_settings");
+// currentSettings() reads these inputs on every save, so they must hold the
+// stored values from boot, not only once the settings view has been opened.
+function fillArgoFields(s: Settings) {
   $<HTMLInputElement>("argo-url").value = s.argo_url;
   $<HTMLInputElement>("argo-insecure").checked = s.argo_insecure;
   $<HTMLInputElement>("argo-iap").checked = !!s.argo_iap_client_id;
   $<HTMLInputElement>("argo-iap-client").value = s.argo_iap_client_id;
   $<HTMLInputElement>("argo-iap-sa").value = s.argo_iap_service_account;
   $("iap-fields").hidden = !s.argo_iap_client_id;
+}
+
+async function openSettings() {
+  resetSteps();
+  showSettingsSection("appearance");
+  showView("view-settings");
+
+  const s = await invoke<Settings>("get_settings");
+  fillArgoFields(s);
   $<HTMLInputElement>("menu-bar-toggle").checked = s.menu_bar;
   $<HTMLInputElement>("hide-shipped").checked = hideShipped;
   $<HTMLInputElement>("hide-noreleases").checked = hideNoReleases;
@@ -2389,6 +2410,7 @@ applyTheme(currentTheme);
 // settings.json is the source of truth; the localStorage copy only avoids a flash at boot.
 invoke<Settings>("get_settings").then((s) => {
   if (s.theme !== currentTheme) applyTheme(s.theme);
+  fillArgoFields(s);
   rules = { ...DEFAULT_RULES, ...s.rules };
   repoRules = s.repo_rules ?? {};
   startTag = s.start_tag || DEFAULT_START_TAG;
